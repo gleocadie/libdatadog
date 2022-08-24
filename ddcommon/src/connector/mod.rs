@@ -81,12 +81,12 @@ fn build_https_connector(
 fn load_root_certs() -> anyhow::Result<rustls::RootCertStore> {
     let mut roots = rustls::RootCertStore::empty();
 
-    for cert in rustls_native_certs::load_native_certs()? {
-        let cert = rustls::Certificate(cert.0);
+    // for cert in rustls_native_certs::load_native_certs()? {
+        // let cert = rustls::Certificate(cert.0);
 
         //TODO: log when invalid cert is loaded
-        roots.add(&cert).ok();
-    }
+        // roots.add(&cert).ok();
+    // }
     if roots.is_empty() {
         return Err(errors::Error::NoValidCertifacteRootsFound.into());
     }
