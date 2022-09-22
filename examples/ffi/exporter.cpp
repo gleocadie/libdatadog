@@ -116,8 +116,8 @@ int main(int argc, char *argv[]) {
     files,
     nullptr,
     30000,
-    "exporter-example",
-    "1.2.3"
+    DDOG_CHARSLICE_C("exporter-example"),
+    DDOG_CHARSLICE_C("1.2.3")
   );
 
   ddog_CancellationToken *cancel = ddog_CancellationToken_new();
