@@ -155,18 +155,6 @@ impl ProfileExporter {
         })
         .to_string();
 
-        // form.add_text("version", "3");
-        // form.add_text("start", start.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
-        // form.add_text("end", end.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
-        // form.add_text("family", self.family.as_ref());
-
-        // for tags in self.tags.as_ref().iter().chain(additional_tags.iter()) {
-        //     for tag in tags.iter() {
-        //         tags_profiler
-        //         form.add_text("tags[]", tag.to_string());
-        //     }
-        // }
-
         form.add_reader_file_with_mime(
             "event",
             Cursor::new(event),
