@@ -129,7 +129,10 @@ impl ProfileExporter {
         files: &[File],
         additional_tags: Option<&Vec<Tag>>,
         timeout: std::time::Duration,
-    ) -> anyhow::Result<Request> {
+        profile_library_name: &str,
+        profile_library_version: &str,
+    ) -> anyhow::Result<Request>
+    {
         let mut form = multipart::Form::default();
 
         let mut tags_profiler = String::new();
@@ -175,8 +178,8 @@ impl ProfileExporter {
             .into_request_builder(concat!("DDProf/", env!("CARGO_PKG_VERSION")))?
             .method(http::Method::POST)
             .header("Connection", "close")
-            .header("DD-EVP-ORIGIN", "fixme-libdatadog-client")
-            .header("DD-EVP-ORIGIN-VERSION", "fixme-libdatadog-client-version");
+            .header("DD-EVP-ORIGIN", profile_library_name)
+            .header("DD-EVP-ORIGIN-VERSION", profile_library_version);
 
         Ok(
             Request::from(form.set_body_convert::<hyper::Body, multipart::Body>(builder)?)
