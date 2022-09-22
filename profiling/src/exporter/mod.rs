@@ -18,8 +18,8 @@ pub mod config;
 mod errors;
 pub use ddcommon::Endpoint;
 
-use serde_json::json;
 use mime;
+use serde_json::json;
 
 #[cfg(unix)]
 pub use connector::uds::{socket_path_from_uri, socket_path_to_uri};
@@ -144,7 +144,7 @@ impl ProfileExporter {
 
         tags_profiler.pop();
 
-        let attachments : Vec<String> = files.iter().map(|file| file.name.to_owned()).collect();
+        let attachments: Vec<String> = files.iter().map(|file| file.name.to_owned()).collect();
 
         let event = json!({
             "attachments": attachments,
@@ -153,13 +153,13 @@ impl ProfileExporter {
             "end": end.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string(),
             "family": self.family.as_ref(),
             "version":"4",
-        }).to_string();
+        })
+        .to_string();
 
         // form.add_text("version", "3");
         // form.add_text("start", start.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
         // form.add_text("end", end.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
         // form.add_text("family", self.family.as_ref());
-
 
         // for tags in self.tags.as_ref().iter().chain(additional_tags.iter()) {
         //     for tag in tags.iter() {
