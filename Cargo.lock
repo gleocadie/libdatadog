@@ -143,6 +143,7 @@ dependencies = [
  "percent-encoding",
  "prost",
  "prost-build",
+ "serde_json",
  "tokio",
  "tokio-util",
 ]

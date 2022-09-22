@@ -18,6 +18,8 @@ pub mod config;
 mod errors;
 pub use ddcommon::Endpoint;
 
+use serde_json::json;
+
 #[cfg(unix)]
 pub use connector::uds::{socket_path_from_uri, socket_path_to_uri};
 
@@ -130,16 +132,44 @@ impl ProfileExporter {
     ) -> anyhow::Result<Request> {
         let mut form = multipart::Form::default();
 
-        form.add_text("version", "3");
-        form.add_text("start", start.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
-        form.add_text("end", end.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
-        form.add_text("family", self.family.as_ref());
+        let mut tags_profiler = String::new();
 
         for tags in self.tags.as_ref().iter().chain(additional_tags.iter()) {
             for tag in tags.iter() {
-                form.add_text("tags[]", tag.to_string());
+                tags_profiler += tag.as_ref();
+                tags_profiler += ",";
             }
         }
+
+        let attachments : Vec<String> = files.iter().map(|file| file.name.to_owned()).collect();
+
+        let event = json!({
+            "attachments": attachments,
+            "tags_profiler": tags_profiler,
+            "start": start.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string(),
+            "end": end.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string(),
+            "family": self.family.as_ref(),
+            "version":"4",
+        }).to_string();
+
+        // form.add_text("version", "3");
+        // form.add_text("start", start.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
+        // form.add_text("end", end.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string());
+        // form.add_text("family", self.family.as_ref());
+
+
+        // for tags in self.tags.as_ref().iter().chain(additional_tags.iter()) {
+        //     for tag in tags.iter() {
+        //         tags_profiler
+        //         form.add_text("tags[]", tag.to_string());
+        //     }
+        // }
+
+        form.add_reader_file(
+            "data[event]",
+            Cursor::new(event),
+            "event",
+        );
 
         for file in files {
             form.add_reader_file(
@@ -153,7 +183,9 @@ impl ProfileExporter {
             .endpoint
             .into_request_builder(concat!("DDProf/", env!("CARGO_PKG_VERSION")))?
             .method(http::Method::POST)
-            .header("Connection", "close");
+            .header("Connection", "close")
+            .header("DD-EVP-ORIGIN", "fixme-libdatadog-client")
+            .header("DD-EVP-ORIGIN-VERSION", "fixme-libdatadog-client-version");
 
         Ok(
             Request::from(form.set_body_convert::<hyper::Body, multipart::Body>(builder)?)
