@@ -19,6 +19,7 @@ mod errors;
 pub use ddcommon::Endpoint;
 
 use serde_json::json;
+use mime;
 
 #[cfg(unix)]
 pub use connector::uds::{socket_path_from_uri, socket_path_to_uri};
@@ -141,6 +142,8 @@ impl ProfileExporter {
             }
         }
 
+        tags_profiler.pop();
+
         let attachments : Vec<String> = files.iter().map(|file| file.name.to_owned()).collect();
 
         let event = json!({
@@ -165,10 +168,11 @@ impl ProfileExporter {
         //     }
         // }
 
-        form.add_reader_file(
-            "data[event]",
-            Cursor::new(event),
+        form.add_reader_file_with_mime(
             "event",
+            Cursor::new(event),
+            "event.json",
+            mime::APPLICATION_JSON,
         );
 
         for file in files {
