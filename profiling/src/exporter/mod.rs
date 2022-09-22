@@ -122,6 +122,7 @@ impl ProfileExporter {
     }
 
     /// Build a Request object representing the profile information provided.
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         &self,
         start: DateTime<Utc>,
@@ -131,8 +132,7 @@ impl ProfileExporter {
         timeout: std::time::Duration,
         profile_library_name: &str,
         profile_library_version: &str,
-    ) -> anyhow::Result<Request>
-    {
+    ) -> anyhow::Result<Request> {
         let mut form = multipart::Form::default();
 
         let mut tags_profiler = String::new();

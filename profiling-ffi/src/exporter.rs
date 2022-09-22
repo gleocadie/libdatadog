@@ -388,6 +388,8 @@ mod test {
                 Slice::from(files),
                 None,
                 timeout_milliseconds,
+                CharSlice::from("dd-trace-foo"),
+                CharSlice::from("1.2.3"),
             )
         };
 
