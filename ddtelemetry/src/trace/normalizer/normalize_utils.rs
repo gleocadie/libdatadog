@@ -230,7 +230,6 @@ pub(crate) fn is_alpha_num(c: char) -> bool {
 #[cfg(test)]
 mod tests {
 
-    use crate::normalize_utils;
     use duplicate::duplicate_item;
 
     #[duplicate_item(
@@ -244,7 +243,7 @@ mod tests {
     )]
     #[test]
     fn test_name() {
-        match normalize_utils::normalize_name(input) {
+        match crate::trace::normalize_utils::normalize_name(input) {
             Ok(val) => {
                 assert_eq!(expected_err, "");
                 assert_eq!(val, expected);
@@ -257,14 +256,14 @@ mod tests {
 
     #[duplicate_item(
         test_name                       input                               expected                                expected_err;
-        [test_normalize_empty_service]  [""]                                [normalize_utils::DEFAULT_SERVICE_NAME] ["Normalizer Error: Empty service name."];
+        [test_normalize_empty_service]  [""]                                [crate::trace::normalize_utils::DEFAULT_SERVICE_NAME] ["Normalizer Error: Empty service name."];
         [test_normalize_valid_service]  ["good"]                            ["good"]                                [""];
         [test_normalize_long_service]   ["Too$Long$.".repeat(20).as_str()]  ["too_long_.".repeat(10)]               [""];
         [test_normalize_dash_service]   ["bad&service"]                     ["bad_service"]                         [""];
     )]
     #[test]
     fn test_name() {
-        match normalize_utils::normalize_service(input) {
+        match crate::trace::normalize_utils::normalize_service(input) {
             Ok(val) => {
                 assert_eq!(expected_err, "");
                 assert_eq!(val, expected)
@@ -320,7 +319,7 @@ mod tests {
     )]
     #[test]
     fn test_name() {
-        match normalize_utils::normalize_tag(input) {
+        match crate::trace::normalize_utils::normalize_tag(input) {
             Ok(normalized_tag) => {
                 assert_eq!(expected_err, "");
                 assert_eq!(normalized_tag, expected)

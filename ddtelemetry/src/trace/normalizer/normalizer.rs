@@ -3,8 +3,8 @@
 // developed at Datadog (https://www.datadoghq.com/). Copyright 2023-Present
 // Datadog, Inc.
 
-use crate::normalize_utils;
-use crate::pb;
+use crate::trace::normalize_utils;
+use crate::trace::pb;
 use std::time::SystemTime;
 
 const MAX_TYPE_LEN: usize = 100;
@@ -106,9 +106,9 @@ pub(crate) fn is_valid_status_code(sc: &str) -> bool {
 #[cfg(test)]
 mod tests {
 
-    use crate::normalize_utils;
-    use crate::normalizer;
-    use crate::pb;
+    use crate::trace::normalize_utils;
+    use crate::trace::normalizer;
+    use crate::trace::pb;
     use rand::Rng;
     use std::collections::HashMap;
     use std::time::SystemTime;
@@ -149,7 +149,7 @@ mod tests {
         let mut test_span = new_test_span();
         test_span.name = "".to_string();
         assert!(normalizer::normalize(&mut test_span).is_ok());
-        assert_eq!(test_span.name, normalizer::DEFAULT_SPAN_NAME);
+        assert_eq!(test_span.name, crate::trace::normalizer::DEFAULT_SPAN_NAME);
     }
 
     #[test]

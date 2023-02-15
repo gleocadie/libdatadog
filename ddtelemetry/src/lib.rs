@@ -27,6 +27,7 @@ pub mod info;
 #[cfg(not(windows))]
 pub mod ipc;
 pub mod metrics;
+pub mod trace;
 pub mod worker;
 
 const DEFAULT_API_VERSION: data::ApiVersion = data::ApiVersion::V1;
