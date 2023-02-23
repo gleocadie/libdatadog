@@ -2,20 +2,20 @@
 
 use curl::easy::{Easy, List};
 use prost::Message;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
-use std::ffi::c_char;
-use std::ffi::CStr;
-use std::time::SystemTime;
-use serde::{Deserialize, Serialize};
-use std::str;
 use std::io::Cursor;
 use std::io::Read;
+use std::str;
+use std::time::SystemTime;
+
 use datadog_trace_protobuf::pb;
 
-// use std::ffi::c_char;
-// use std::ffi::CStr;
-// use napi::{CallContext, Error, JsNumber, JsObject, JsUnknown, Result, Status};
+#[allow(unused_imports)]
+use std::ffi::c_char;
+#[allow(unused_imports)]
+use std::ffi::CStr;
 
 #[macro_use]
 extern crate napi_derive;
@@ -35,9 +35,8 @@ pub struct Span {
 }
 
 fn construct_headers() -> std::io::Result<List> {
-    let api_key;
-    match env::var("DD_API_KEY") {
-        Ok(key) => api_key = key,
+    let api_key = match env::var("DD_API_KEY") {
+        Ok(key) => key,
         Err(_) => panic!("oopsy, no DD_API_KEY was provided"),
     };
     let mut list = List::new();
@@ -71,7 +70,7 @@ fn send(data: Vec<u8>) -> std::io::Result<Vec<u8>> {
                 Ok(v) => {
                     println!("sent-----------------");
                     println!("successfully sent:::::: {:?}", v);
-                },
+                }
                 Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
             };
             Ok(result_data.len())
@@ -79,7 +78,7 @@ fn send(data: Vec<u8>) -> std::io::Result<Vec<u8>> {
 
         transfer.perform()?;
     }
-    return Ok(dst);
+    Ok(dst)
 }
 
 #[cfg(feature = "build_for_node")]
@@ -134,7 +133,6 @@ pub extern "C" fn send_trace(trace_str: *const c_char, before_time: i64) {
 }
 
 fn deserialize_and_send_trace(trace_str: &str) {
-
     let spans: Vec<Span> = serde_json::from_str(trace_str).expect("Couldn't unwrap JSON");
 
     let mut tracer_payloads = Vec::<pb::TracerPayload>::new();
@@ -152,12 +150,12 @@ fn deserialize_and_send_trace(trace_str: &str) {
     meta_map.insert("poc".to_string(), "true".to_string());
     meta_map.insert("napi_rs".to_string(), "true".to_string());
     meta_map.insert("_dd.origin".to_string(), "ffi-service".to_string());
-    
+
     let mut metrics_map = HashMap::new();
-    metrics_map.insert("_dd.agent_psr".to_string(), 1 as f64);
-    metrics_map.insert("_sample_rate".to_string(), 1 as f64);
-    metrics_map.insert("_sampling_priority_v1".to_string(), 1 as f64);
-    metrics_map.insert("_top_level".to_string(), 1 as f64);
+    metrics_map.insert("_dd.agent_psr".to_string(), 1_f64);
+    metrics_map.insert("_sample_rate".to_string(), 1_f64);
+    metrics_map.insert("_sampling_priority_v1".to_string(), 1_f64);
+    metrics_map.insert("_top_level".to_string(), 1_f64);
 
     for single_span in spans.iter() {
         let span = pb::Span {
@@ -194,7 +192,7 @@ fn deserialize_and_send_trace(trace_str: &str) {
         service: "ffi-service".to_string(),
         name: "gcp.cloud-function".to_string(),
         resource: "gcp.cloud-function".to_string(),
-        trace_id: trace_id,
+        trace_id,
         span_id: span_id + 1,
         parent_id: 0,
         start: min_start_date,
@@ -224,14 +222,13 @@ fn deserialize_and_send_trace(trace_str: &str) {
         dropped_trace: false,
     };
 
-    let mut chunks = Vec::<pb::TraceChunk>::new();
-    chunks.push(trace_chunk);
+    let chunks = vec![trace_chunk];
 
     let single_payload = pb::TracerPayload {
         app_version: "ffi-1.0.0".to_string(),
         language_name: "ffi-nodejs".to_string(),
         container_id: "ffi-containerid".to_string(),
-        chunks: chunks,
+        chunks,
         env: "ffi-env".to_string(),
         hostname: "ffi-hostname".to_string(),
         language_version: "ffi-nodejs-version".to_string(),
@@ -248,7 +245,7 @@ fn deserialize_and_send_trace(trace_str: &str) {
         error_tps: 60.0,
         target_tps: 60.0,
         tags: tags.clone(),
-        tracer_payloads: tracer_payloads,
+        tracer_payloads,
     };
 
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
@@ -268,10 +265,10 @@ fn deserialize_and_send_trace(trace_str: &str) {
     }
 
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-      Ok(n) => {
-          println!("before send {:?}", n.as_millis())
-      }
-      Err(_) => panic!("SystemTime error"),
+        Ok(n) => {
+            println!("before send {:?}", n.as_millis())
+        }
+        Err(_) => panic!("SystemTime error"),
     }
 }
 
@@ -281,4 +278,3 @@ pub fn serialize_agent_payload(payload: &pb::AgentPayload) -> Vec<u8> {
     payload.encode(&mut buf).unwrap();
     buf
 }
-
