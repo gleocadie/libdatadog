@@ -23,12 +23,12 @@ extern crate napi_derive;
 #[derive(Debug, Deserialize, Serialize)]
 #[repr(C)]
 pub struct Span {
-    service: String,
+    service: Option<String>,
     name: String,
     resource: String,
     trace_id: u64,
     span_id: u64,
-    parent_id: u64,
+    parent_id: Option<u64>,
     start: i64,
     duration: i64,
     error: i32,
@@ -161,12 +161,12 @@ fn deserialize_and_send_trace(trace_str: &str) {
 
     for single_span in spans.iter() {
         let span = pb::Span {
-            service: single_span.service.clone(),
+            service: single_span.service.clone().unwrap_or_default(),
             name: single_span.name.clone(),
             resource: single_span.resource.clone(),
             trace_id: single_span.trace_id,
             span_id: single_span.span_id,
-            parent_id: single_span.parent_id,
+            parent_id: single_span.parent_id.unwrap_or_default(),
             start: single_span.start,
             duration: single_span.duration,
             error: single_span.error,
