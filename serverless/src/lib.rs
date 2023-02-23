@@ -4,6 +4,8 @@ use curl::easy::{Easy, List};
 use prost::Message;
 use std::collections::HashMap;
 use std::env;
+use std::ffi::c_char;
+use std::ffi::CStr;
 use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use std::str;
@@ -80,10 +82,12 @@ fn send(data: Vec<u8>) -> std::io::Result<Vec<u8>> {
     return Ok(dst);
 }
 
+#[cfg(feature = "build_for_node")]
+// Function to be exposed to native node addons compiled with napi.rs
 #[no_mangle]
 #[napi]
 #[allow(improper_ctypes_definitions)]
-pub extern "C" fn send_trace(trace_str: String, before_time: i64) {
+pub extern "C" fn send_trace_node(trace_str: String, before_time: i64) {
     let duration_since_epoch = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap();
@@ -98,9 +102,40 @@ pub extern "C" fn send_trace(trace_str: String, before_time: i64) {
 
     println!("SENDING TRACE FROM RUST");
 
-    let r_str = trace_str.as_str();
+    deserialize_and_send_trace(trace_str.as_str());
+}
 
-    let spans: Vec<Span> = serde_json::from_str(r_str).expect("Couldn't unwrap JSON");
+#[cfg(not(feature = "build_for_node"))]
+// Function to be exposed when building dynamic libraries for non-node.
+#[no_mangle]
+pub extern "C" fn send_trace(trace_str: *const c_char, before_time: i64) {
+    let duration_since_epoch = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap();
+    let timestamp_nanos: i64 = duration_since_epoch.as_micros() as i64;
+
+    let time_diff = timestamp_nanos - before_time;
+
+    println!(
+        "Time taken to launch FFI function: {:?}ms",
+        time_diff as f64 / 1000.0
+    );
+
+    println!("SENDING TRACE FROM RUST");
+
+    let c_str = unsafe {
+        assert!(!trace_str.is_null());
+        CStr::from_ptr(trace_str)
+    };
+
+    println!("c_str: {:?}", c_str);
+
+    deserialize_and_send_trace(c_str.to_str().unwrap());
+}
+
+fn deserialize_and_send_trace(trace_str: &str) {
+
+    let spans: Vec<Span> = serde_json::from_str(trace_str).expect("Couldn't unwrap JSON");
 
     let mut tracer_payloads = Vec::<pb::TracerPayload>::new();
     let mut tags = HashMap::new();

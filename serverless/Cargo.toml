@@ -14,7 +14,6 @@ prost = "0.11.6"
 datadog-trace-protobuf = { path = "../trace-protobuf" }
 
 [build-dependencies]
-prost-build = { version = "0.6" }
 napi-build = "2.0.1"
 
 [profile.release]
@@ -35,3 +34,6 @@ debug-assertions = false
 [lib]
 name = "serverless"
 crate-type = ["cdylib"]
+
+[features]
+build_for_node = []
