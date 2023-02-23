@@ -9,14 +9,11 @@ use serde::{Deserialize, Serialize};
 use std::str;
 use std::io::Cursor;
 use std::io::Read;
+use datadog_trace_protobuf::pb;
 
 // use std::ffi::c_char;
 // use std::ffi::CStr;
 // use napi::{CallContext, Error, JsNumber, JsObject, JsUnknown, Result, Status};
-
-pub mod pb {
-    include!("pb.rs");
-}
 
 #[macro_use]
 extern crate napi_derive;

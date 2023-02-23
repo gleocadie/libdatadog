@@ -1965,10 +1965,11 @@ name = "serverless"
 version = "0.0.0"
 dependencies = [
  "curl",
+ "datadog-trace-protobuf",
  "napi",
  "napi-build",
  "napi-derive",
- "prost 0.6.1",
+ "prost 0.11.6",
  "prost-build",
  "serde",
  "serde_json",
