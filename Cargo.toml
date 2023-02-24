@@ -23,8 +23,19 @@ resolver = "2"
 [profile.dev]
 debug = 2 # full debug info
 
+[profile.dev.package.serverless]
+opt-level = 'z'  # Optimize for size.
+codegen-units = 1
+strip = true
+debug-assertions = false
+
 [profile.release]
 debug = 1 # line tables only
 lto = true
 codegen-units = 1
 opt-level = "s" # optimize for size
+
+[profile.release.package.serverless]
+opt-level = 'z'  # Optimize for size.
+codegen-units = 1
+strip = true

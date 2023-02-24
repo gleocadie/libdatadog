@@ -17,21 +17,6 @@ openssl = { version = "0.10", features = ["vendored"] }
 [build-dependencies]
 napi-build = "2.0.1"
 
-[profile.release]
-opt-level = 'z'  # Optimize for size.
-lto = true
-codegen-units = 1
-panic = 'abort'
-strip = true
-
-[profile.dev]
-opt-level = 'z'  # Optimize for size.
-lto = true
-codegen-units = 1
-panic = 'abort'
-strip = true
-debug-assertions = false
-
 [lib]
 name = "serverless"
 crate-type = ["cdylib"]
