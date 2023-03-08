@@ -22,4 +22,5 @@ name = "serverless"
 crate-type = ["cdylib"]
 
 [features]
+default = ["build_for_node"]
 build_for_node = []

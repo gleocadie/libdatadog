@@ -86,18 +86,7 @@ fn send(data: Vec<u8>) -> std::io::Result<Vec<u8>> {
 #[no_mangle]
 #[napi]
 #[allow(improper_ctypes_definitions)]
-pub extern "C" fn send_trace_node(trace_str: String, before_time: i64) {
-    let duration_since_epoch = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap();
-    let timestamp_nanos: i64 = duration_since_epoch.as_micros() as i64;
-
-    let time_diff = timestamp_nanos - before_time;
-
-    println!(
-        "Time taken to launch FFI function: {:?}ms",
-        time_diff as f64 / 1000.0
-    );
+pub extern "C" fn send_trace_node(trace_str: String) {
 
     println!("SENDING TRACE FROM RUST");
 
@@ -107,18 +96,7 @@ pub extern "C" fn send_trace_node(trace_str: String, before_time: i64) {
 #[cfg(not(feature = "build_for_node"))]
 // Function to be exposed when building dynamic libraries for non-node.
 #[no_mangle]
-pub extern "C" fn send_trace(trace_str: *const c_char, before_time: i64) {
-    let duration_since_epoch = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap();
-    let timestamp_nanos: i64 = duration_since_epoch.as_micros() as i64;
-
-    let time_diff = timestamp_nanos - before_time;
-
-    println!(
-        "Time taken to launch FFI function: {:?}ms",
-        time_diff as f64 / 1000.0
-    );
+pub extern "C" fn send_trace(trace_str: *const c_char) {
 
     println!("SENDING TRACE FROM RUST");
 
