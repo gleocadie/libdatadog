@@ -91,6 +91,7 @@ pub struct Profile {
     start_time: SystemTime,
     period: Option<(i64, ValueType)>,
     endpoints: Endpoints,
+    temp_duration_ns: i64,
 }
 
 pub struct Endpoints {
@@ -257,6 +258,7 @@ impl Profile {
             start_time,
             period: None,
             endpoints: Default::default(),
+            temp_duration_ns: 0
         };
 
         profile.intern("");
@@ -500,15 +502,13 @@ impl Profile {
     ///                may also accidentally pass an earlier time. The duration will be set to zero
     ///                these cases.
     pub fn serialize(
-        &self,
+        &mut self,
         end_time: Option<SystemTime>,
         duration: Option<Duration>,
     ) -> anyhow::Result<EncodedProfile> {
         let end = end_time.unwrap_or_else(SystemTime::now);
         let start = self.start_time;
-        let mut profile: pprof::Profile = self.try_into()?;
-
-        profile.duration_nanos = duration
+        let duration_nanos = duration
             .unwrap_or_else(|| {
                 end.duration_since(start).unwrap_or({
                     // Let's not throw away the whole profile just because the clocks were wrong.
@@ -518,6 +518,10 @@ impl Profile {
             })
             .as_nanos()
             .min(i64::MAX as u128) as i64;
+
+        self.temp_duration_ns = duration_nanos;
+        let mut profile: pprof::Profile = (self as &Profile).try_into()?;
+        profile.duration_nanos = duration_nanos;
 
         let mut buffer: Vec<u8> = Vec::new();
         profile.encode(&mut buffer)?;
@@ -561,6 +565,11 @@ impl Profile {
             .get(&local_root_span_id)
             .map(i64::clone))
     }
+
+    pub fn index_for(&self, value_string: &str) -> Option<usize> {
+        let string_id = self.strings.get_index_of(value_string)?;
+        return self.sample_types.clone().into_iter().position(|value_type| value_type.r#type as usize == string_id);
+    }
 }
 
 impl TryFrom<&Profile> for pprof::Profile {
@@ -571,6 +580,12 @@ impl TryFrom<&Profile> for pprof::Profile {
             Some(tuple) => (tuple.0, Some(tuple.1)),
             None => (0, None),
         };
+
+        let cores_power_millijoules_index = profile.index_for("cores-power");
+        let cores_power_milliwatts_index = profile.index_for("cores-power-mW");
+
+        let pkg_power_millijoules_index = profile.index_for("pkg-power");
+        let pkg_power_milliwatts_index = profile.index_for("pkg-power-mW");
 
         /* Rust pattern: inverting Vec<Result<T,E>> into Result<Vec<T>, E> error with .collect:
          * https://doc.rust-lang.org/rust-by-example/error/iter_result.html#fail-the-entire-operation-with-collect
@@ -594,9 +609,21 @@ impl TryFrom<&Profile> for pprof::Profile {
                     }
                 }
 
+                let mut fixed_values = values.to_vec();
+
+                if cores_power_millijoules_index.is_some() && cores_power_milliwatts_index.is_some() {
+                    let duration_seconds: f64 = (profile.temp_duration_ns as f64) / 1_000_000_000.0;
+                    fixed_values[cores_power_milliwatts_index.unwrap()] = (fixed_values[cores_power_millijoules_index.unwrap()] as f64 / duration_seconds) as i64;
+                }
+
+                if pkg_power_millijoules_index.is_some() && pkg_power_milliwatts_index.is_some() {
+                    let duration_seconds: f64 = (profile.temp_duration_ns as f64) / 1_000_000_000.0;
+                    fixed_values[pkg_power_milliwatts_index.unwrap()] = (fixed_values[pkg_power_millijoules_index.unwrap()] as f64 / duration_seconds) as i64;
+                }
+
                 Ok(pprof::Sample {
                     location_ids: sample.locations.iter().map(Into::into).collect(),
-                    values: values.to_vec(),
+                    values: fixed_values,
                     labels,
                 })
             })

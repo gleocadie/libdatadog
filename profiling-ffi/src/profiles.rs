@@ -498,7 +498,7 @@ impl From<datadog_profiling::profile::EncodedProfile> for EncodedProfile {
 #[must_use]
 #[no_mangle]
 pub unsafe extern "C" fn ddog_prof_Profile_serialize(
-    profile: &Profile,
+    profile: &mut Profile,
     end_time: Option<&Timespec>,
     duration_nanos: Option<&i64>,
 ) -> SerializeResult {
