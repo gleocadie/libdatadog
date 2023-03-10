@@ -576,6 +576,17 @@ impl TryFrom<&Profile> for pprof::Profile {
     type Error = anyhow::Error;
 
     fn try_from(profile: &Profile) -> anyhow::Result<pprof::Profile> {
+        fn millijoules_to_co2_equivalent_milligrams(millijoules: i64) -> i64 {
+            // Hardcoded due to running out of time...
+            // I got my ip: https://api.ipify.org/?format=json
+            // I queried the green web foundation's api: https://api.thegreenwebfoundation.org/api/v3/ip-to-co2intensity/my-ip
+            // And then took the carbon_intensity, see https://developers.thegreenwebfoundation.org/api/ip-to-co2/overview/
+            let millijoules_to_kwh = 2.778e-10;
+            let grams_per_kwh_in_uk = 268.255;
+
+            return (millijoules as f64 * millijoules_to_kwh * grams_per_kwh_in_uk * 1000.0) as i64;
+        }
+
         let (period, period_type) = match profile.period {
             Some(tuple) => (tuple.0, Some(tuple.1)),
             None => (0, None),
@@ -583,9 +594,11 @@ impl TryFrom<&Profile> for pprof::Profile {
 
         let cores_power_millijoules_index = profile.index_for("cores-power");
         let cores_power_milliwatts_index = profile.index_for("cores-power-mW");
+        let cores_co2_index = profile.index_for("cores-CO₂-equivalent");
 
         let pkg_power_millijoules_index = profile.index_for("pkg-power");
         let pkg_power_milliwatts_index = profile.index_for("pkg-power-mW");
+        let pkg_co2_index = profile.index_for("pkg-CO₂-equivalent");
 
         /* Rust pattern: inverting Vec<Result<T,E>> into Result<Vec<T>, E> error with .collect:
          * https://doc.rust-lang.org/rust-by-example/error/iter_result.html#fail-the-entire-operation-with-collect
@@ -614,11 +627,19 @@ impl TryFrom<&Profile> for pprof::Profile {
                 if cores_power_millijoules_index.is_some() && cores_power_milliwatts_index.is_some() {
                     let duration_seconds: f64 = (profile.temp_duration_ns as f64) / 1_000_000_000.0;
                     fixed_values[cores_power_milliwatts_index.unwrap()] = (fixed_values[cores_power_millijoules_index.unwrap()] as f64 / duration_seconds) as i64;
+
+                    if cores_co2_index.is_some() {
+                        fixed_values[cores_co2_index.unwrap()] = millijoules_to_co2_equivalent_milligrams(fixed_values[cores_power_millijoules_index.unwrap()]);
+                    }
                 }
 
                 if pkg_power_millijoules_index.is_some() && pkg_power_milliwatts_index.is_some() {
                     let duration_seconds: f64 = (profile.temp_duration_ns as f64) / 1_000_000_000.0;
                     fixed_values[pkg_power_milliwatts_index.unwrap()] = (fixed_values[pkg_power_millijoules_index.unwrap()] as f64 / duration_seconds) as i64;
+
+                    if pkg_co2_index.is_some() {
+                        fixed_values[pkg_co2_index.unwrap()] = millijoules_to_co2_equivalent_milligrams(fixed_values[pkg_power_millijoules_index.unwrap()]);
+                    }
                 }
 
                 Ok(pprof::Sample {
