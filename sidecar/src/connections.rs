@@ -41,6 +41,7 @@ impl Accept for UnixListenerTracked {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Result<Self::Conn, Self::Error>>> {
         let stream = ready!(self.listener.poll_accept(cx))?.0;
+        println!("UnixListenerTracker is polling to accept new connection");
         Poll::Ready(Some(Ok(UnixStreamTracked {
             inner: stream,
             tracker: self.connection_tracker.clone(),
@@ -138,6 +139,7 @@ pub struct TrackerWatcher {
 
 impl TrackerWatcher {
     pub async fn wait_for_no_instances(&self, min_duration_without_instances: Duration) {
+        println!("wait_for_no_instances in TrackerWatcher");
         let mut prev_count = self.count.load(Relaxed);
         let mut prev_time = tokio::time::Instant::now();
         loop {
@@ -146,6 +148,7 @@ impl TrackerWatcher {
                 .is_err()
                 && prev_count == 0
             {
+                println!("TrackerWatcher has not been notified within 1 second and count == 0. Returning");
                 return;
             }
 
@@ -154,6 +157,7 @@ impl TrackerWatcher {
                 && count == 0
                 && prev_time.elapsed() >= min_duration_without_instances
             {
+                println!("TrackerWatcher prev_count == count AND count == 0 AND prev_time.elapsed() > 1 second. Returning.");
                 return;
             }
 

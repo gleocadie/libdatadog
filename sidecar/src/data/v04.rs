@@ -17,11 +17,11 @@ pub struct Span<'a> {
     parent_id: Option<u64>,
     start: i64,
     duration: i64,
-    error: i32,
+    error: Option<i32>,
     #[serde(borrow)]
     meta: HashMap<&'a str, &'a str>,
     #[serde(borrow)]
-    metrics: HashMap<&'a str, f64>,
+    metrics: Option<HashMap<&'a str, f64>>,
 }
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
@@ -103,7 +103,7 @@ impl<'a> From<Span<'a>> for pb::Span {
             parent_id: src.parent_id.unwrap_or(0),
             start: src.start,
             duration: src.duration,
-            error: src.error,
+            error: src.error.unwrap_or(0),
             meta: src
                 .meta
                 .iter()
@@ -111,6 +111,7 @@ impl<'a> From<Span<'a>> for pb::Span {
                 .collect(),
             metrics: src
                 .metrics
+                .unwrap_or(HashMap::new())
                 .iter()
                 .map(|(key, value)| (key.to_string(), *value))
                 .collect(),
@@ -200,9 +201,9 @@ impl<'a> From<&'a pb::Span> for Span<'a> {
             parent_id: Some(*parent_id),
             start: *start,
             duration: *duration,
-            error: *error,
+            error: Some(*error),
             meta: meta.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect(),
-            metrics: metrics.iter().map(|(k, v)| (k.as_str(), *v)).collect(),
+            metrics: Some(metrics.iter().map(|(k, v)| (k.as_str(), *v)).collect()),
         }
     }
 }
@@ -242,9 +243,9 @@ mod tests {
                     parent_id: None,
                     start: 4,
                     duration: 5,
-                    error: 1,
+                    error: Some(1),
                     meta: HashMap::from([("key", "value")]),
-                    metrics: HashMap::from([("metric", 0.1)]),
+                    metrics: Some(HashMap::from([("metric", 0.1)])),
                 }],
             }],
         };

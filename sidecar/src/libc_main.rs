@@ -45,6 +45,11 @@ unsafe extern "C" fn new_main(
         .expect("extra null found in in new env variable"),
     );
 
+    println!("{}", format!(
+        "DD_TRACE_AGENT_URL=unix://{}",
+        path.to_string_lossy()
+    ));
+
     let old_environ = raw_env::swap(env.as_ptr());
 
     let rv = match unsafe { ORIGINAL_MAIN } {

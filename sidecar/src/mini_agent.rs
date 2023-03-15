@@ -3,6 +3,7 @@ use std::error::Error;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::process;
 use std::task::Poll;
 use std::time::Duration;
 
@@ -12,9 +13,10 @@ use ddcommon::HttpClient;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
-use tokio::net::{UnixListener};
+use tokio::net::UnixListener;
 use tokio::sync::mpsc::Sender;
 
+use crate::connections::UnixListenerTracked;
 use crate::data::v04::{self};
 
 // Example traced app: go install github.com/DataDog/trace-examples/go/heartbeat@latest
@@ -62,16 +64,19 @@ impl Service<Request<Body>> for MiniAgent {
         match (req.method(), req.uri().path()) {
             // exit, shutting down the subprocess process.
             (&Method::GET, "/exit") => {
+                println!("/exit called. shutting down.");
                 std::process::exit(0);
             }
             // node.js does put while Go does POST whoa
             (&Method::POST | &Method::PUT, "/v0.4/traces") => {
+                println!("POST or PUT received at /v0.4/traces");
                 let handler = self.v04_handler.clone();
                 Box::pin(async move { handler.handle(req).await })
             }
 
             // Return the 404 Not Found for other routes.
             _ => Box::pin(async move {
+                println!("404 not found being returned.");
                 let mut not_found = Response::default();
                 *not_found.status_mut() = StatusCode::NOT_FOUND;
                 Ok(not_found)
@@ -82,15 +87,33 @@ impl Service<Request<Body>> for MiniAgent {
 
 impl V04Handler {
     async fn handle(&self, mut req: Request<Body>) -> anyhow::Result<Response<Body>> {
-        let body = hyper::body::to_bytes(req.body_mut()).await?;
-        let src: v04::Payload = rmp_serde::from_slice(&body)?;
-
+        println!("handling recently received request.");
+        let body = match hyper::body::to_bytes(req.body_mut()).await {
+            Ok(res) => res,
+            Err(e) => {
+                println!("error consuming request body into bytes. Err: {}", e);
+                panic!("error consuming request body into bytes. Err: {}", e);
+            }
+        };
+        println!("consumed request body into bytes.");
+        let src: v04::Payload = match rmp_serde::from_slice(&body) {
+            Ok(res) => res,
+            Err(e) => {
+                println!("error processing bytes into v04::Payload. Err: {}", e);
+                panic!("error processing bytes into v04::Payload. Err: {}", e);
+            }
+        };
+        println!("processed bytes into v04::Payload");
         let payload = self
             .builder
             .with_headers(req.headers())
             .assemble_payload(src);
+        
+        println!("tracer payload assembled.");
 
         self.payload_sender.send(payload).await?;
+
+        println!("tracer payload sent to backend trace intake.");
 
         Ok(Response::default())
     }
@@ -206,17 +229,18 @@ impl Uploader {
     }
 }
 
-pub(crate) async fn main(_: UnixListener) -> anyhow::Result<()> {
+pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
     println!("in mini_agent main");
     let (tx, mut rx) = tokio::sync::mpsc::channel::<TracerPayload>(1);
     let uploader = Uploader::init(&crate::config::Config::init());
     tokio::spawn(async move {
         let mut payloads = vec![];
-        let mut interval = tokio::time::interval(Duration::from_secs(10));
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
         loop {
             tokio::select! {
                 // if there are no connections for 1 second, exit the main loop
                 Some(d) = rx.recv() => {
+                    println!("rx.recv has new item. pushing into payloads buffer.");
                     payloads.push(d);
                 }
 
@@ -225,7 +249,7 @@ pub(crate) async fn main(_: UnixListener) -> anyhow::Result<()> {
                         continue
                     }
                     match uploader.submit(payloads.drain(..).collect()).await {
-                        Ok(()) => {},
+                        Ok(()) => {println!("sending trace to trace intake.")},
                         Err(e) => {eprintln!("{:?}", e)}
                     }
                 }
@@ -233,12 +257,20 @@ pub(crate) async fn main(_: UnixListener) -> anyhow::Result<()> {
         }
     });
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8126));
+    println!("mini agent PID: {}", process::id());
 
-    let server = Server::bind(&addr).serve(MiniAgentSpawner { payload_sender: tx });
-    println!("starting server...");
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+    let listener = UnixListenerTracked::from(listener);
+    let watcher = listener.watch();
+    let server = Server::builder(listener).serve(MiniAgentSpawner { payload_sender: tx });
+    tokio::select! {
+        // if there are no connections for 5 seconds, exit the main loop
+        _ = watcher.wait_for_no_instances(Duration::from_secs(1)) => {
+            println!("no connections for 5 seconds. Exiting main loop.");
+            Ok(())
+        }
+        res = server => {
+            res?;
+            Ok(())
+        }
     }
-    Ok(())
 }
