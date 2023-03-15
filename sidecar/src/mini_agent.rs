@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::Poll;
 use std::time::Duration;
@@ -11,10 +12,9 @@ use ddcommon::HttpClient;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
-use tokio::net::UnixListener;
+use tokio::net::{UnixListener};
 use tokio::sync::mpsc::Sender;
 
-use crate::connections::UnixListenerTracked;
 use crate::data::v04::{self};
 
 // Example traced app: go install github.com/DataDog/trace-examples/go/heartbeat@latest
@@ -206,12 +206,13 @@ impl Uploader {
     }
 }
 
-pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
+pub(crate) async fn main(_: UnixListener) -> anyhow::Result<()> {
+    println!("in mini_agent main");
     let (tx, mut rx) = tokio::sync::mpsc::channel::<TracerPayload>(1);
     let uploader = Uploader::init(&crate::config::Config::init());
     tokio::spawn(async move {
         let mut payloads = vec![];
-        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        let mut interval = tokio::time::interval(Duration::from_secs(10));
         loop {
             tokio::select! {
                 // if there are no connections for 1 second, exit the main loop
@@ -232,17 +233,12 @@ pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
         }
     });
 
-    let listener = UnixListenerTracked::from(listener);
-    let watcher = listener.watch();
-    let server = Server::builder(listener).serve(MiniAgentSpawner { payload_sender: tx });
-    tokio::select! {
-        // if there are no connections for 1 second, exit the main loop
-        _ = watcher.wait_for_no_instances(Duration::from_secs(1)) => {
-            Ok(())
-        }
-        res = server => {
-            res?;
-            Ok(())
-        }
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8126));
+
+    let server = Server::bind(&addr).serve(MiniAgentSpawner { payload_sender: tx });
+    println!("starting server...");
+    if let Err(e) = server.await {
+        eprintln!("server error: {}", e);
     }
+    Ok(())
 }

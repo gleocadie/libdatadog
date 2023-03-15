@@ -30,17 +30,25 @@ pub extern "C" fn sidecar_entrypoint() {
 
 #[allow(dead_code)]
 pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
+    println!("in maybe start");
     let liaison = ddtelemetry::ipc::setup::SharedDirLiaison::new_tmp_dir();
-    if let Some(listener) = liaison.attempt_listen()? {
-        spawn_worker::SpawnWorker::new()
-            .stdin(Stdio::Null)
-            .stderr(Stdio::Inherit)
-            .stdout(Stdio::Inherit)
-            .pass_fd(listener)
-            .daemonize(true)
-            .target(entrypoint!(sidecar_entrypoint))
-            .spawn()?;
-    };
+    // if let Some(listener) = liaison.attempt_listen()? {
+    //     spawn_worker::SpawnWorker::new()
+    //         .stdin(Stdio::Null)
+    //         .stderr(Stdio::Inherit)
+    //         .stdout(Stdio::Inherit)
+    //         .pass_fd(listener)
+    //         .daemonize(true)
+    //         .target(entrypoint!(sidecar_entrypoint))
+    //         .spawn()?;
+    // };
+    spawn_worker::SpawnWorker::new()
+        .stdin(Stdio::Null)
+        .stderr(Stdio::Inherit)
+        .stdout(Stdio::Inherit)
+        .daemonize(true)
+        .target(entrypoint!(sidecar_entrypoint))
+        .spawn()?;
 
     // TODO: temporary hack - connect to socket and leak it
     // this should lead to sidecar being up as long as the processes that attempted to connect to it

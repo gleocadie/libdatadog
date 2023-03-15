@@ -197,6 +197,7 @@ impl SpawnWorker {
     }
 
     pub fn target<T: Into<Target>>(&mut self, target: T) -> &mut Self {
+        println!("in spawn_worker target");
         self.target = target.into();
         self
     }
@@ -246,12 +247,14 @@ impl SpawnWorker {
     }
 
     pub fn spawn(&mut self) -> anyhow::Result<Child> {
+        println!("trying to spawn in spawn_worker");
         let pid = self.do_spawn()?;
 
         Ok(Child { pid })
     }
 
     fn do_spawn(&self) -> anyhow::Result<Option<libc::pid_t>> {
+        println!("in do_spawn");
         let mut argv = ExecVec::<0>::empty();
         // set argv[0] and process name shown eg in `ps`
         let process_name = CString::new(self.process_name.as_deref().unwrap_or("spawned_worker"))?;
@@ -389,7 +392,7 @@ impl SpawnWorker {
         // no allocations in the child process should happen by this point for maximum safety
         if let Fork::Parent(child_pid) = unsafe { fork()? } {
             return Ok(Some(child_pid));
-        }
+        } // what is this doing - David
 
         if self.daemonize {
             match unsafe { fork()? } {

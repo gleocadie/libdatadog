@@ -30,6 +30,7 @@ unsafe extern "C" fn new_main(
     argv: *const *const ffi::c_char,
     _envp: *const *const ffi::c_char,
 ) -> ffi::c_int {
+    println!("in new main");
     let mut env = raw_env::as_clist();
     let path = maybe_start().unwrap();
     env.remove_entry(|e| e.starts_with("LD_PRELOAD=".as_bytes()));
@@ -74,6 +75,7 @@ pub unsafe extern "C" fn __libc_start_main(
             .unwrap();
     ORIGINAL_MAIN = Some(main);
     #[cfg(not(test))]
+    println!("starting new_main");
     libc_start_main(new_main, argc, argv, init, fini, rtld_fini, stack_end);
     #[cfg(test)]
     libc_start_main(

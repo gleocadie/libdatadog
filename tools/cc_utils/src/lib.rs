@@ -179,7 +179,7 @@ impl ImprovedBuild {
 
         match output_type {
             OutputType::Executable => {
-                cmd.args(["-o".into(), output_path.as_os_str().to_owned()]);
+                cmd.args(["-o".into(), output_path.as_os_str().to_owned(), "-Wl,--no-as-needed".into(), "-ldl".into()]);
             }
             OutputType::Shared => {
                 cmd.args([
