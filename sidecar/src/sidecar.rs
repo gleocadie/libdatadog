@@ -22,6 +22,8 @@ pub extern "C" fn sidecar_entrypoint() {
         listener.set_nonblocking(true).unwrap();
         let listener = UnixListener::from_std(listener).unwrap();
 
+        println!("Starting mini_agent");
+
         let server_future = mini_agent::main(listener);
 
         rt.block_on(server_future).unwrap();

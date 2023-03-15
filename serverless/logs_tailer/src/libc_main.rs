@@ -1,10 +1,17 @@
-use std::ffi::{self, CStr, CString};
+use std::{
+    ffi::{self, CStr, CString},
+    thread,
+};
 
 use ddcommon::cstr;
 use nix::libc;
-use spawn_worker::ExecVec;
+use spawn_worker::{entrypoint, ExecVec, Stdio};
 
-use crate::sidecar::maybe_start;
+use logs::logs::ServerlessLogsAgent;
+
+use signal_hook::{consts::SIGUSR1, iterator::Signals};
+
+use crate::logs_tailer::process_stdin;
 
 type StartMainFn = extern "C" fn(
     main: MainFn,
@@ -107,31 +114,14 @@ unsafe extern "C" fn new_main(
     argv: *const *const ffi::c_char,
     _envp: *const *const ffi::c_char,
 ) -> ffi::c_int {
-    println!("Running via LD_PRELOAD");
-    let mut env = CListMutPtr::from_raw_parts(*environ() as *mut *const ffi::c_char);
-    env.remove_entry(|e| e.starts_with("LD_PRELOAD=".as_bytes()));
+    println!("Sending stdout and stderr to Datadog");
+    let logs_agent = ServerlessLogsAgent {};
+    logs_agent.run();
 
-    let mut env = env.into_exec_vec();
-    let path = maybe_start().unwrap();
-    env.push(
-        CString::new(format!(
-            "DD_TRACE_AGENT_URL=unix://{}",
-            path.to_string_lossy()
-        ))
-        .unwrap(),
-    );
-
-    let old_environ = *environ();
-    *environ() = env.as_ptr();
-
-    let rv = match unsafe { ORIGINAL_MAIN } {
-        Some(f) => f(argc, argv, env.as_ptr()),
+    match unsafe { ORIGINAL_MAIN } {
+        Some(f) => f(argc, argv, _envp),
         None => 0,
-    };
-
-    // setting back before exiting as env will be garbage collected and all of its references will become invalid
-    *environ() = old_environ;
-    rv
+    }
 }
 
 unsafe fn dlsym_fn(handle: *mut ffi::c_void, str: &CStr) -> Option<*mut ffi::c_void> {
@@ -153,25 +143,61 @@ pub extern "C" fn __libc_start_main(
     rtld_fini: FiniFn,
     stack_end: *const ffi::c_void,
 ) {
-    println!("RUNNING FROM LD_PRELOAD");
-    let libc_start_main = unsafe {
-        std::mem::transmute::<_, StartMainFn>(
+    unsafe {
+        let libc_start_main = std::mem::transmute::<_, StartMainFn>(
             dlsym_fn(libc::RTLD_NEXT, cstr!("__libc_start_main")).unwrap(),
-        )
-    } as StartMainFn;
-    unsafe { ORIGINAL_MAIN = Some(main) };
-    #[cfg(not(test))]
-    libc_start_main(new_main, argc, argv, init, fini, rtld_fini, stack_end);
-    #[cfg(test)]
-    libc_start_main(
-        unsafe { ORIGINAL_MAIN.unwrap() },
-        argc,
-        argv,
-        init,
-        fini,
-        rtld_fini,
-        stack_end,
-    );
+        ) as StartMainFn;
+
+        ORIGINAL_MAIN = Some(main);
+
+        if std::process::id() == 1 || std::process::id() == 7 {
+            println!("Skipping process ID 1 or 7");
+            libc_start_main(
+                ORIGINAL_MAIN.unwrap(),
+                argc,
+                argv,
+                init,
+                fini,
+                rtld_fini,
+                stack_end,
+            )
+        }
+        // the pointer to envp is the next integer after argv
+        // it's a null-terminated array of strings
+        // Note: for some reason setting a new env in new_main didn't work,
+        // as the subprocesses spawned by this process still contain LD_PRELOAD,
+        // but removing it here does indeed work
+        let envp_ptr = argv.offset(argc as isize + 1) as *mut *const ffi::c_char;
+        let mut env_vec = CListMutPtr::from_raw_parts(envp_ptr);
+        match env_vec.remove_entry(|e| e.starts_with("LD_PRELOAD=".as_bytes())) {
+            Some(preload_lib) => {
+                println!(
+                    "Found {} in process {}, starting bootstrap process",
+                    CStr::from_ptr(preload_lib as *const ffi::c_char)
+                        .to_str()
+                        .expect("Couldn't convert LD_PRELOAD lib to string"),
+                    std::process::id(),
+                );
+
+                libc_start_main(new_main, argc, argv, init, fini, rtld_fini, stack_end)
+            }
+            None => {
+                println!(
+                    "No LD_PRELOAD found in env of process {}",
+                    std::process::id()
+                );
+                libc_start_main(
+                    ORIGINAL_MAIN.unwrap(),
+                    argc,
+                    argv,
+                    init,
+                    fini,
+                    rtld_fini,
+                    stack_end,
+                )
+            }
+        }
+    }
 }
 
 static mut ORIGINAL_MAIN: Option<MainFn> = None;

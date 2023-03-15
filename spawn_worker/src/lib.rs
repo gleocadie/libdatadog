@@ -37,7 +37,9 @@ macro_rules! entrypoint {
 
 #[cfg(test)]
 mod tests {
-    use crate::{LD_PRELOAD_TRAMPOLINE_LIB, TRAMPOLINE_BIN};
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    use crate::LD_PRELOAD_TRAMPOLINE_LIB;
+    use crate::TRAMPOLINE_BIN;
     #[test]
     fn test_trampolines_sizes() {
         assert!(TRAMPOLINE_BIN.len() < 100 * 1024);

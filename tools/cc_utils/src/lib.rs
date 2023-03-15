@@ -197,6 +197,8 @@ impl ImprovedBuild {
         for linkable in &self.linkables {
             cmd.args(linkable.to_compiler_args(&compiler));
         }
+
+        cmd.arg("-ldl");
         println!("compiling: {cmd:?}");
         let status = cmd.spawn()?.wait()?;
 

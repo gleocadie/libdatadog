@@ -15,7 +15,9 @@ members = [
     "trace-obfuscation",
     "spawn_worker",
     "sidecar",
-    "tests/spawn_from_lib"
+    "tests/spawn_from_lib",
+    "serverless/logs_tailer",
+    "logs"
 ]
 # https://doc.rust-lang.org/cargo/reference/resolver.html#feature-resolver-version-2
 resolver = "2"

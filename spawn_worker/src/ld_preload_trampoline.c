@@ -10,6 +10,7 @@
 #include <string.h>
 
 int main_override(int argc, char **argv) {
+  printf("main_override");
   if (argc > 2) {
     // const char *_library_path = argv[1];
     const char *symbol_name = argv[2];

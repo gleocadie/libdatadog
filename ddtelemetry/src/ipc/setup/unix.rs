@@ -51,6 +51,8 @@ impl Liaison for SharedDirLiaison {
         let dir = self.socket_path.parent().unwrap_or_else(|| Path::new("/"));
         ensure_dir_exists(dir)?;
 
+        println!("Temp dir is {:?}", dir);
+
         let _g = match FLock::try_rw_lock(&self.lock_path) {
             Ok(lock) => lock,
             // failing to acquire lock

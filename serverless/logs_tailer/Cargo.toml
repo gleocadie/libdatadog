@@ -1,0 +1,35 @@
+[package]
+name = "logs_tailer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = {version = "1"}
+ddcommon = {path = "../../ddcommon"}
+logs = {path = "../../logs"}
+ddtelemetry = {path = "../../ddtelemetry"}
+nix = {version = "0.26"}
+spawn_worker = {path = "../../spawn_worker"}
+
+# mini agent deps
+bytes = {version = "1.4"}
+http-body-util = {version = "0.1.0-rc.2"}
+hyper = {version = "0.14", features = ["full"]}
+hyperlocal = {version = "0.8", features = ["server"]}
+pin-project = {version = "1.0"}
+pretty_env_logger = {version = "0.4"}
+tokio = {version = "1.25", features = ["full"]}
+serde = {version = "1.0", features = ["derive"] }
+rmp-serde = {version = "1.1"}
+serde_json = { version = "1.0" }
+rustix = {version = "0.37.1", features = ["process"]}
+signal-hook = "0.3.15"
+
+[lib]
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "logs_tailer"
+path = "src/logs_tailer.rs"
