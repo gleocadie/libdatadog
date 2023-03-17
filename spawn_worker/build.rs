@@ -6,6 +6,7 @@ pub use cc_utils::cc;
 fn main() {
     cc_utils::ImprovedBuild::new()
         .file("src/trampoline/exec.c")
+        .link_dynamically("dl")
         .warnings(true)
         .warnings_into_errors(true)
         .emit_rerun_if_env_changed(true)

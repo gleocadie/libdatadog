@@ -198,7 +198,7 @@ impl EventCollector {
         payload_tx: Sender<Box<pb::TracerPayload>>,
         mut event_rx: Receiver<Event>,
     ) {
-        let mut cull_interval = tokio::time::interval(Duration::from_secs(2));
+        let mut cull_interval = tokio::time::interval(Duration::from_secs(20));
         let mut gc_interval = tokio::time::interval(Duration::from_secs(20));
 
         loop {
