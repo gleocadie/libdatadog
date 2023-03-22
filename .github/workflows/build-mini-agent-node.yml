@@ -3,7 +3,7 @@ name: build-mini-agent-node.yml
 on:
   push:
       branches:
-        - david.lee/mini-agent-child-process
+        - david.lee/ld_preload_rust_trace_sidecar
 
 jobs:
   build:
