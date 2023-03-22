@@ -93,7 +93,7 @@ unsafe extern "C" fn napi_start_mini_agent() {
     writeln!(f, "--------------").unwrap();
 }
 
-// #[allow(dead_code)]
+#[allow(dead_code)]
 unsafe extern "C" fn new_main(
     argc: ffi::c_int,
     argv: *const *const ffi::c_char,

@@ -17,7 +17,7 @@ mod linux {
         Ok(mfd)
     }
 }
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 
 use std::{
     env,
@@ -30,6 +30,7 @@ use std::{
 use io_lifetimes::OwnedFd;
 
 use nix::{sys::wait::WaitStatus, unistd::Pid};
+use sysinfo::{System, SystemExt, ProcessExt};
 
 use crate::fork::{fork, Fork};
 use crate::utils::ExecVec;
@@ -47,7 +48,7 @@ fn write_to_tmp_file(data: &[u8]) -> anyhow::Result<tempfile::NamedTempFile> {
     Ok(tmp_file)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SpawnMethod {
     #[cfg(target_os = "linux")]
     FdExecTrampoline,
@@ -255,6 +256,16 @@ impl SpawnWorker {
 
     fn do_spawn(&self) -> anyhow::Result<Option<libc::pid_t>> {
         // println!("in do_spawn");
+
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open("/tmp/mini-agent-logs.txt")
+            .unwrap();
+
+        writeln!(f, "in do spawn").unwrap();
+
         let mut argv = ExecVec::<0>::empty();
         // set argv[0] and process name shown eg in `ps`
         let process_name = CString::new(self.process_name.as_deref().unwrap_or("spawned_worker"))?;
@@ -271,6 +282,7 @@ impl SpawnWorker {
 
                 argv.push_cstring(path);
                 argv.push_cstring(entrypoint.symbol_name.clone());
+                writeln!(f, "pushing entrypoint.symbol_name into argv: {}", entrypoint.symbol_name.to_string_lossy()).unwrap();
             }
             Target::Manual(path, symbol_name) => {
                 argv.push_cstring(path.clone());
@@ -329,6 +341,8 @@ impl SpawnWorker {
             Some(m) => m.clone(),
             None => self.target.detect_spawn_method()?,
         };
+
+        writeln!(f, "spawn method: {:?}", spawn_method).unwrap();
 
         // build and allocate final exec fn and its dependencies
         let spawn: Box<dyn Fn()> = match spawn_method {
@@ -391,8 +405,9 @@ impl SpawnWorker {
 
         // no allocations in the child process should happen by this point for maximum safety
         if let Fork::Parent(child_pid) = unsafe { fork()? } {
+            writeln!(f, "Returning if let Fork::Parent(child_pid)").unwrap();
             return Ok(Some(child_pid));
-        } // what is this doing - David
+        }
 
         if self.daemonize {
             match unsafe { fork()? } {
@@ -400,8 +415,16 @@ impl SpawnWorker {
                     std::process::exit(0);
                 }
                 Fork::Child => {
+                    writeln!(f, "Fork::Child Daemonize").unwrap();
                     // put the child in a new session to reparent it to init and fully daemonize it
                     unsafe { libc::setsid() };
+                    writeln!(f, "current process id after libc::setside: {}", std::process::id()).unwrap();
+                    let s = System::new_all();
+    
+                    writeln!(f, "printing processes after libc::setside").unwrap();
+                    for (pid, process) in s.processes() {
+                        writeln!(f, "process: {} {} {} {:?}", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+                    }
                 }
             }
         }

@@ -45,7 +45,7 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
 
     let liaison = ddtelemetry::ipc::setup::SharedDirLiaison::new_tmp_dir();
     if let Some(listener) = liaison.attempt_listen()? {
-        spawn_worker::SpawnWorker::new()
+        let child_pid = spawn_worker::SpawnWorker::new()
             .stdin(Stdio::Null)
             .stderr(Stdio::Inherit)
             .stdout(Stdio::Inherit)
@@ -53,6 +53,7 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
             .daemonize(true)
             .target(entrypoint!(sidecar_entrypoint))
             .spawn()?;
+        writeln!(f, "spawned child pid in maybe_start: {:?}", child_pid.pid).unwrap();
     };
 
     let process_name: String = std::env::current_exe()
