@@ -15,6 +15,6 @@ jobs:
       postbuild: '' # command to run after prebuilds have been generated
       prebuild: '' # command to run before prebuilds are generated
       skip: '' # list of jobs to skip, for example when a platform is not supported
-      target-name: 'node-napi-rs' # target name in binding.gyp
+      target-name: 'libsidecar-node' # target name in binding.gyp
       napi-rs: 'true'
       directory-path: 'sidecar'
