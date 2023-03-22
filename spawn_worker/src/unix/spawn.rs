@@ -249,7 +249,7 @@ impl SpawnWorker {
     pub fn spawn(&mut self) -> anyhow::Result<Child> {
         // println!("trying to spawn in spawn_worker");
         let pid = self.do_spawn()?;
-
+        
         Ok(Child { pid })
     }
 

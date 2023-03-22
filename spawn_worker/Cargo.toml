@@ -8,6 +8,7 @@ anyhow = { version = "1.0" }
 tempfile = { version = "3.3" }
 io-lifetimes = { version = "1.0" }
 smallvec = {version = "1.10", features = ["const_generics"]}
+sysinfo = "0.28.3"
 
 [target.'cfg(not(windows))'.dependencies]
 nix = { version = "0.26" }

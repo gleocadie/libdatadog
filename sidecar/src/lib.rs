@@ -6,5 +6,6 @@ pub mod mini_agent;
 pub mod pipes;
 pub mod sidecar;
 
+#[cfg(feature = "build_for_node")]
 #[macro_use]
 extern crate napi_derive;

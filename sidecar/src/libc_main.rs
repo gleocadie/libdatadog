@@ -30,6 +30,7 @@ type MainFn = unsafe extern "C" fn(
 type InitFn = extern "C" fn(ffi::c_int, *const *const ffi::c_char, *const *const ffi::c_char);
 type FiniFn = extern "C" fn();
 
+#[cfg(feature = "build_for_node")]
 #[no_mangle]
 #[napi]
 #[allow(improper_ctypes_definitions)]
@@ -43,6 +44,16 @@ unsafe extern "C" fn napi_start_mini_agent() {
 
     writeln!(f, "--------------").unwrap();
     writeln!(f, "start napi_start_mini_agent()").unwrap();
+
+    let process_name: String = std::env::current_exe()
+        .ok()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+
+    writeln!(f, "current process name: {}", process_name).unwrap();
+    writeln!(f, "current process pid: {}", std::process::id()).unwrap();
 
     let env = raw_env::as_clist();
     let path = match maybe_start() {
@@ -71,11 +82,18 @@ unsafe extern "C" fn napi_start_mini_agent() {
         path.to_string_lossy()
     )).unwrap();
 
+    let s = System::new_all();
+    
+    writeln!(f, "printing processes in end of napi_start_mini_agent...").unwrap();
+    for (pid, process) in s.processes() {
+        writeln!(f, "process: {} {} {} {:?}", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+    }
+
     writeln!(f, "end napi_start_mini_agent()").unwrap();
     writeln!(f, "--------------").unwrap();
 }
 
-#[allow(dead_code)]
+// #[allow(dead_code)]
 unsafe extern "C" fn new_main(
     argc: ffi::c_int,
     argv: *const *const ffi::c_char,
@@ -128,6 +146,13 @@ unsafe extern "C" fn new_main(
     )).unwrap();
 
     let old_environ = raw_env::swap(env.as_ptr());
+
+    let s = System::new_all();
+    
+    writeln!(f, "printing processes in end of new_main...").unwrap();
+    for (pid, process) in s.processes() {
+        writeln!(f, "process: {} {}", pid, process.exe().to_string_lossy()).unwrap();
+    }
 
     let rv = match unsafe { ORIGINAL_MAIN } {
         Some(main) => main(argc, argv, env.as_ptr()),
@@ -193,46 +218,46 @@ pub unsafe extern "C" fn __libc_start_main(
 
     writeln!(f, "| ld_preload at timestamp: {:?}, for process named: {} and with pid: {} |\n", time, current_process, process::id()).unwrap();
 
-    libc_start_main(
-        ORIGINAL_MAIN.unwrap(),
-        argc,
-        argv,
-        init,
-        fini,
-        rtld_fini,
-        stack_end,
-    )
+    // libc_start_main(
+    //     ORIGINAL_MAIN.unwrap(),
+    //     argc,
+    //     argv,
+    //     init,
+    //     fini,
+    //     rtld_fini,
+    //     stack_end,
+    // )
 
-    // let envp_ptr = argv.offset(argc as isize + 1) as *mut *const ffi::c_char;
-    // let mut env_vec = CListMutPtr::from_raw_parts(envp_ptr);
-    // match env_vec.remove_entry(|e| e.starts_with("LD_PRELOAD=".as_bytes())) {
-    //     Some(preload_lib) => {
-    //         println!(
-    //             "Found {} in process {}, starting bootstrap process",
-    //             CStr::from_ptr(preload_lib as *const ffi::c_char)
-    //                 .to_str()
-    //                 .expect("Couldn't convert LD_PRELOAD lib to string"),
-    //             std::process::id(),
-    //         );
+    let envp_ptr = argv.offset(argc as isize + 1) as *mut *const ffi::c_char;
+    let mut env_vec = CListMutPtr::from_raw_parts(envp_ptr);
+    match env_vec.remove_entry(|e| e.starts_with("LD_PRELOAD=".as_bytes())) {
+        Some(preload_lib) => {
+            println!(
+                "Found {} in process {}, starting bootstrap process",
+                CStr::from_ptr(preload_lib as *const ffi::c_char)
+                    .to_str()
+                    .expect("Couldn't convert LD_PRELOAD lib to string"),
+                std::process::id(),
+            );
 
-    //         libc_start_main(new_main, argc, argv, init, fini, rtld_fini, stack_end)
-    //     }
-    //     None => {
-    //         println!(
-    //             "No LD_PRELOAD found in env of process {}",
-    //             std::process::id()
-    //         );
-    //         libc_start_main(
-    //             ORIGINAL_MAIN.unwrap(),
-    //             argc,
-    //             argv,
-    //             init,
-    //             fini,
-    //             rtld_fini,
-    //             stack_end,
-    //         )
-    //     }
-    // }
+            libc_start_main(new_main, argc, argv, init, fini, rtld_fini, stack_end)
+        }
+        None => {
+            println!(
+                "No LD_PRELOAD found in env of process {}",
+                std::process::id()
+            );
+            libc_start_main(
+                ORIGINAL_MAIN.unwrap(),
+                argc,
+                argv,
+                init,
+                fini,
+                rtld_fini,
+                stack_end,
+            )
+        }
+    }
 }
 
 static mut ORIGINAL_MAIN: Option<MainFn> = None;

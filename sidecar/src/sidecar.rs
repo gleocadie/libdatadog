@@ -5,6 +5,7 @@ use std::{
 
 use ddtelemetry::ipc::setup::Liaison;
 use spawn_worker::{entrypoint, Stdio};
+use sysinfo::{System, SystemExt, ProcessExt};
 use tokio::net::UnixListener;
 
 use std::io::Write;
@@ -53,6 +54,30 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
             .target(entrypoint!(sidecar_entrypoint))
             .spawn()?;
     };
+
+    let process_name: String = std::env::current_exe()
+        .ok()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+
+    writeln!(f, "|current process name in maybe_start: {}|", process_name).unwrap();
+    writeln!(f, "|current process pid in maybe_start: {}|", std::process::id()).unwrap();
+
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open("/tmp/mini-agent-logs.txt")
+        .unwrap();
+
+    let s = System::new_all();
+    
+    writeln!(f, "printing processes in maybe_start after spawn...").unwrap();
+    for (pid, process) in s.processes() {
+        writeln!(f, "process: {} {} {} {:?}", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+    }
 
     // TODO: temporary hack - connect to socket and leak it
     // this should lead to sidecar being up as long as the processes that attempted to connect to it
