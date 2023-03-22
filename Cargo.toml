@@ -28,3 +28,8 @@ debug = 1 # line tables only
 lto = true
 codegen-units = 1
 opt-level = "s" # optimize for size
+
+[profile.release.package.sidecar]
+opt-level = 'z'  # Optimize for size.
+codegen-units = 1
+strip = true

@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs::OpenOptions;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::io::Write;
 use std::pin::Pin;
-use std::process;
+use std::{process, fs};
 use std::task::Poll;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use datadog_trace_protobuf::pb::{AgentPayload, TracerPayload};
 use datadog_trace_protobuf::prost::Message;
@@ -61,6 +63,13 @@ impl Service<Request<Body>> for MiniAgent {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open("/tmp/mini-agent-logs.txt")
+            .unwrap();
+
         match (req.method(), req.uri().path()) {
             // exit, shutting down the subprocess process.
             (&Method::GET, "/exit") => {
@@ -70,6 +79,7 @@ impl Service<Request<Body>> for MiniAgent {
             // node.js does put while Go does POST whoa
             (&Method::POST | &Method::PUT, "/v0.4/traces") => {
                 println!("POST or PUT received at /v0.4/traces");
+                writeln!(f, "POST or PUT received at /v0.4/traces").unwrap();
                 let handler = self.v04_handler.clone();
                 Box::pin(async move { handler.handle(req).await })
             }
@@ -77,6 +87,7 @@ impl Service<Request<Body>> for MiniAgent {
             // Return the 404 Not Found for other routes.
             _ => Box::pin(async move {
                 println!("404 not found being returned.");
+                writeln!(f, "404 not found being returned.").unwrap();
                 let mut not_found = Response::default();
                 *not_found.status_mut() = StatusCode::NOT_FOUND;
                 Ok(not_found)
@@ -87,11 +98,20 @@ impl Service<Request<Body>> for MiniAgent {
 
 impl V04Handler {
     async fn handle(&self, mut req: Request<Body>) -> anyhow::Result<Response<Body>> {
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open("/tmp/mini-agent-logs.txt")
+            .unwrap();
+
         println!("handling recently received request.");
+        writeln!(f, "handling recently received request.").unwrap();
         let body = match hyper::body::to_bytes(req.body_mut()).await {
             Ok(res) => res,
             Err(e) => {
                 println!("error consuming request body into bytes. Err: {}", e);
+                writeln!(f, "error consuming request body into bytes. Err: {}", e).unwrap();
                 panic!("error consuming request body into bytes. Err: {}", e);
             }
         };
@@ -100,6 +120,7 @@ impl V04Handler {
             Ok(res) => res,
             Err(e) => {
                 println!("error processing bytes into v04::Payload. Err: {}", e);
+                writeln!(f, "error processing bytes into v04::Payload. Err: {}", e).unwrap();
                 panic!("error processing bytes into v04::Payload. Err: {}", e);
             }
         };
@@ -114,6 +135,7 @@ impl V04Handler {
         self.payload_sender.send(payload).await?;
 
         println!("tracer payload sent to backend trace intake.");
+        writeln!(f, "handling recently received request.").unwrap();
 
         Ok(Response::default())
     }
@@ -230,17 +252,27 @@ impl Uploader {
 }
 
 pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
-    println!("in mini_agent main");
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open("/tmp/mini-agent-logs.txt")
+        .unwrap();
+
+    writeln!(f, "in mini_agent main").unwrap();
+
+    // println!("in mini_agent main");
     let (tx, mut rx) = tokio::sync::mpsc::channel::<TracerPayload>(1);
     let uploader = Uploader::init(&crate::config::Config::init());
     tokio::spawn(async move {
         let mut payloads = vec![];
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
         loop {
             tokio::select! {
                 // if there are no connections for 1 second, exit the main loop
                 Some(d) = rx.recv() => {
                     println!("rx.recv has new item. pushing into payloads buffer.");
+                    writeln!(f, "rx.recv has new item. pushing into payloads buffer.").unwrap();
                     payloads.push(d);
                 }
 
@@ -249,7 +281,10 @@ pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
                         continue
                     }
                     match uploader.submit(payloads.drain(..).collect()).await {
-                        Ok(()) => {println!("sending trace to trace intake.")},
+                        Ok(()) => {
+                            println!("sending trace to trace intake.");
+                            writeln!(f, "sending trace to trace intake.").unwrap();
+                        },
                         Err(e) => {eprintln!("{:?}", e)}
                     }
                 }
@@ -258,6 +293,16 @@ pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
     });
 
     println!("mini agent PID: {}", process::id());
+
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open("/tmp/mini-agent-logs.txt")
+        .unwrap();
+
+    writeln!(f, "mini agent PID: {}", process::id()).unwrap();
+    writeln!(f, "timestamp: {}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()).unwrap();
 
     let listener = UnixListenerTracked::from(listener);
     let watcher = listener.watch();
