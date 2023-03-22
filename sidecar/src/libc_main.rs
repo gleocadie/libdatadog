@@ -12,6 +12,7 @@ use chrono;
 
 use crate::sidecar::maybe_start;
 
+
 type StartMainFn = extern "C" fn(
     main: MainFn,
     argc: ffi::c_int,
@@ -28,6 +29,51 @@ type MainFn = unsafe extern "C" fn(
 ) -> ffi::c_int;
 type InitFn = extern "C" fn(ffi::c_int, *const *const ffi::c_char, *const *const ffi::c_char);
 type FiniFn = extern "C" fn();
+
+#[no_mangle]
+#[napi]
+#[allow(improper_ctypes_definitions)]
+unsafe extern "C" fn napi_start_mini_agent() {
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open("/tmp/mini-agent-logs.txt")
+        .unwrap();
+
+    writeln!(f, "--------------").unwrap();
+    writeln!(f, "start napi_start_mini_agent()").unwrap();
+
+    let env = raw_env::as_clist();
+    let path = match maybe_start() {
+        Ok(p) => {
+            writeln!(f, "maybe_start was successful").unwrap();
+            p
+        },
+        Err(e) => {
+            writeln!(f, "Panicking: error maybe starting: {}", e).unwrap();
+            panic!("Error maybe starting");
+        },
+    };
+
+    let mut env: ExecVec<10> = env.into_exec_vec();
+
+    env.push_cstring(
+        CString::new(format!(
+            "DD_TRACE_AGENT_URL=unix://{}",
+            path.to_string_lossy()
+        ))
+        .expect("extra null found in in new env variable"),
+    );
+
+    writeln!(f, "{}", format!(
+        "DD_TRACE_AGENT_URL=unix://{}",
+        path.to_string_lossy()
+    )).unwrap();
+
+    writeln!(f, "end napi_start_mini_agent()").unwrap();
+    writeln!(f, "--------------").unwrap();
+}
 
 #[allow(dead_code)]
 unsafe extern "C" fn new_main(

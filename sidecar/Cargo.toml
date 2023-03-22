@@ -28,6 +28,11 @@ serde_json = { version = "1.0" }
 datadog-trace-protobuf = { path = "../trace-protobuf" }
 sysinfo = "0.28.3"
 chrono = "0.4.24"
+napi = { version = "2.10.6", default-features = false, features = ["napi4"] }
+napi-derive = "2.9.4"
+
+[build-dependencies]
+napi-build = "2.0.1"
 
 [dev-dependencies]
 tokio-test = {version = "0.4"}
