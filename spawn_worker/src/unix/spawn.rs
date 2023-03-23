@@ -448,29 +448,29 @@ impl SpawnWorker {
         writeln!(f, "child process pid: {} |", std::process::id()).unwrap();
 
         if self.daemonize {
-            writeln!(f, "Daemonizing process pid: {} |", std::process::id()).unwrap()
+            writeln!(f, "Daemonizing process pid: {} |", std::process::id()).unwrap();
             match unsafe { fork()? } {
                 Fork::Parent(_) => {
-                    writeln!(f, "Fork::Parent Daemonize, immediately exiting|").unwrap()
+                    writeln!(f, "Fork::Parent Daemonize, immediately exiting|").unwrap();
                     std::process::exit(0);
                 }
                 Fork::Child => {
-                    writeln!(f, "Fork::Child Daemonize, cur_pid: {}|", std::process::id()).unwrap()
-                    writeln!(f, "the current process' parent BEFORE libc::setside: {}|", std::os::unix::process::parent_id()).unwrap()
+                    writeln!(f, "Fork::Child Daemonize, cur_pid: {}|", std::process::id()).unwrap();
+                    writeln!(f, "the current process' parent BEFORE libc::setside: {}|", std::os::unix::process::parent_id()).unwrap();
                     // put the child in a new session to reparent it to init and fully daemonize it
                     unsafe { 
                         let pid = libc::setsid();
-                        writeln!(f, "setsid returned pid: {}|", pid).unwrap()
+                        writeln!(f, "setsid returned pid: {}|", pid).unwrap();
                         pid
                     };
-                    writeln!(f, "current process id after libc::setside: {}|", std::process::id()).unwrap()
+                    writeln!(f, "current process id after libc::setside: {}|", std::process::id()).unwrap();
                     let s = System::new_all();
 
-                    writeln!(f, "the current process' parent AFTER libc::setside: {}|", std::os::unix::process::parent_id()).unwrap()
+                    writeln!(f, "the current process' parent AFTER libc::setside: {}|", std::os::unix::process::parent_id()).unwrap();
     
-                    writeln!(f, "printing processes after libc::setside|").unwrap()
+                    writeln!(f, "printing processes after libc::setside|").unwrap();
                     for (pid, process) in s.processes() {
-                        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap()
+                        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
                     }
                 }
             }
@@ -488,7 +488,7 @@ impl SpawnWorker {
             unsafe { libc::dup2(fd, libc::STDERR_FILENO) };
         }
 
-        writeln!(f, "pid of process that is about to call spawn: {}", std::process::id()).unwrap()
+        writeln!(f, "pid of process that is about to call spawn: {}", std::process::id()).unwrap();
 
         spawn();
 
