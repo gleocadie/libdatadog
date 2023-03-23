@@ -287,9 +287,11 @@ impl SpawnWorker {
         writeln!(f, "in do spawn|").unwrap();
 
         let mut argv = ExecVec::<0>::empty();
+        let mut new_argv = ExecVec::<0>::empty();
         // set argv[0] and process name shown eg in `ps`
         let process_name = CString::new(self.process_name.as_deref().unwrap_or("spawned_worker"))?;
-        argv.push_cstring(process_name);
+        argv.push_cstring(process_name.clone());
+        new_argv.push_cstring(process_name.clone());
 
         match &self.target {
             Target::Entrypoint(entrypoint) => {
@@ -302,10 +304,11 @@ impl SpawnWorker {
 
                 argv.push_cstring(path.clone());
                 argv.push_cstring(entrypoint.symbol_name.clone());
-                writeln!(f, "pushing entrypoint.symbol_name into argv: {}|", entrypoint.symbol_name.to_string_lossy()).unwrap();
-                writeln!(f, "pushing path into argv: {}|", path.to_string_lossy()).unwrap();
-                println!("pushing entrypoint.symbol_name into argv: {}|", entrypoint.symbol_name.to_string_lossy());
-                println!("pushing path into argv: {}|", path.to_string_lossy());
+
+                let lib_path = env::var("DD_MINI_AGENT_LIB_PATH").unwrap();
+                // new_argv.push_cstring(CString::new("/home/bits/test/c_test/libsidecar.so").unwrap());
+                new_argv.push_cstring(CString::new(lib_path).unwrap());
+                new_argv.push_cstring(entrypoint.symbol_name.clone());
             }
             Target::Manual(path, symbol_name) => {
                 argv.push_cstring(path.clone());
@@ -383,7 +386,9 @@ impl SpawnWorker {
                     // where allocator is not fork+thread safe
                     writeln!(f, "spawn method is being set|").unwrap();
 
-                    unsafe { libc::fexecve(fd.as_raw_fd(), argv.as_ptr(), envp.as_ptr()) };
+                    writeln!(f, "about to call fexecve").unwrap();
+
+                    unsafe { libc::fexecve(fd.as_raw_fd(), new_argv.as_ptr(), envp.as_ptr()) };
 
                     // if we're here then exec has failed
                     writeln!(f, "if we're here then exec has failed: {}", std::io::Error::last_os_error()).unwrap();
@@ -492,7 +497,6 @@ impl SpawnWorker {
 
         spawn();
 
-        writeln!(f, "printing processes after spawn|").unwrap();
         std::process::exit(1);
     }
 }

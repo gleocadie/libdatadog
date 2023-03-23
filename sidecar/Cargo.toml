@@ -28,14 +28,14 @@ serde_json = { version = "1.0" }
 datadog-trace-protobuf = { path = "../trace-protobuf" }
 sysinfo = "0.28.3"
 chrono = "0.4.24"
-napi = { version = "2.10.6", default-features = false, features = ["napi4"] }
-napi-derive = "2.9.4"
+napi = { version = "2.10.6", default-features = false, features = ["napi4"], optional = true }
+napi-derive = { version = "2.9.4", optional = true }
 
 [build-dependencies]
-napi-build = "2.0.1"
+napi-build = { version = "2.0.1", optional = true }
 
 [dev-dependencies]
 tokio-test = {version = "0.4"}
 
 [features]
-build_for_node = []
+build_for_node = ["dep:napi", "dep:napi-derive", "dep:napi-build"]

@@ -50,7 +50,7 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
             .stderr(Stdio::Inherit)
             .stdout(Stdio::Inherit)
             .pass_fd(listener)
-            // .daemonize(true)
+            .daemonize(true)
             .target(entrypoint!(sidecar_entrypoint))
             .spawn()?;
         writeln!(f, "spawned child pid in maybe_start: {:?}|", child_pid.pid).unwrap();
