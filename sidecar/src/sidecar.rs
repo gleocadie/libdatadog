@@ -83,8 +83,15 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
     // TODO: temporary hack - connect to socket and leak it
     // this should lead to sidecar being up as long as the processes that attempted to connect to it
 
-    let con = liaison.connect_to_server()?;
-    nix::unistd::dup(con.as_raw_fd())?; // LEAK! - dup also resets (?) CLOEXEC flag set by Rust UnixStream constructor
+    match liaison.connect_to_server() {
+        Ok(c) => {
+            nix::unistd::dup(c.as_raw_fd())?; // LEAK! - dup also resets (?) CLOEXEC flag set by Rust UnixStream constructor
+        },
+        Err(e) => {
+            println!("error in temporary hack: {}", e);
+            // panic!("error in temp hack: {}", e);
+        },
+    };
 
     Ok(liaison.path().to_path_buf())
 }
