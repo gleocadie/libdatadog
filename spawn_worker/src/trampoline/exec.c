@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
             printf("%s %s", library_path, symbol_name);
             return 0;
         }
-#ifndef _WIN32
+// #ifndef _WIN32
         void *handle = dlopen(library_path, RTLD_LAZY);
         if (!handle)
         {
@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
         }
         (*fn)();
         dlclose(handle);
-#endif        
+// #endif        
         return 0;
     }
 
