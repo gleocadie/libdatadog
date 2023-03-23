@@ -1,4 +1,4 @@
-use std::{ffi::{self, CString, CStr}, fs::{File, self, OpenOptions}, path::Path, time::SystemTime, process};
+use std::{ffi::{self, CString, CStr}, fs::{File, self, OpenOptions}, path::Path, time::SystemTime, process, thread, time::Duration};
 use std::io::Write;
 
 use ddcommon::cstr;
@@ -42,8 +42,8 @@ unsafe extern "C" fn napi_start_mini_agent() {
         .open("/tmp/mini-agent-logs.txt")
         .unwrap();
 
-    writeln!(f, "--------------").unwrap();
-    writeln!(f, "start napi_start_mini_agent()").unwrap();
+    writeln!(f, "--------------|").unwrap();
+    writeln!(f, "start napi_start_mini_agent()|").unwrap();
 
     let process_name: String = std::env::current_exe()
         .ok()
@@ -52,17 +52,18 @@ unsafe extern "C" fn napi_start_mini_agent() {
         .unwrap()
         .to_owned();
 
-    writeln!(f, "current process name: {}", process_name).unwrap();
-    writeln!(f, "current process pid: {}", std::process::id()).unwrap();
+    writeln!(f, "current process name: {}|", process_name).unwrap();
+    writeln!(f, "current process pid: {}|", std::process::id()).unwrap();
 
     let env = raw_env::as_clist();
     let path = match maybe_start() {
         Ok(p) => {
-            writeln!(f, "maybe_start was successful").unwrap();
+            writeln!(f, "maybe_start was successful|").unwrap();
             p
         },
         Err(e) => {
-            writeln!(f, "Panicking: error maybe starting: {}", e).unwrap();
+            writeln!(f, "Panicking: error maybe starting: {}|", e).unwrap();
+            println!("Panicking: error maybe starting: {}|", e);
             panic!("Error maybe starting");
         },
     };
@@ -78,19 +79,28 @@ unsafe extern "C" fn napi_start_mini_agent() {
     );
 
     writeln!(f, "{}", format!(
-        "DD_TRACE_AGENT_URL=unix://{}",
+        "DD_TRACE_AGENT_URL=unix://{}|",
         path.to_string_lossy()
     )).unwrap();
 
     let s = System::new_all();
-    
-    writeln!(f, "printing processes in end of napi_start_mini_agent...").unwrap();
+
+    writeln!(f, "printing processes in end of napi_start_mini_agent BEFORE wait...|").unwrap();
     for (pid, process) in s.processes() {
-        writeln!(f, "process: {} {} {} {:?}", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
     }
 
-    writeln!(f, "end napi_start_mini_agent()").unwrap();
-    writeln!(f, "--------------").unwrap();
+    thread::sleep(Duration::from_secs(2));
+    
+    writeln!(f, "printing processes in end of napi_start_mini_agent AFTER wait...|").unwrap();
+    for (pid, process) in s.processes() {
+        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+    }
+    
+    writeln!(f, "current process before ending napi_start: {}|", std::process::id()).unwrap();
+
+    writeln!(f, "end napi_start_mini_agent()|").unwrap();
+    writeln!(f, "--------------|").unwrap();
 }
 
 #[allow(dead_code)]

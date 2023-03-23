@@ -1,8 +1,9 @@
 // Unless explicitly stated otherwise all files in this repository are licensed under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/). Copyright 2021-Present Datadog, Inc.
+use std::io::Write;
 
 use std::{
-    env, fs, io,
+    env, fs::{self, OpenOptions}, io,
     os::unix::{
         net::{UnixListener, UnixStream},
         prelude::PermissionsExt,
@@ -60,16 +61,26 @@ impl Liaison for SharedDirLiaison {
                 return Err(err);
             }
         };
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open("/tmp/mini-agent-logs.txt")
+            .unwrap();
+        writeln!(f, "in attempt_listen to a socket|").unwrap();
 
         if self.socket_path.exists() {
             // if socket is already listening, then creating listener is not available
             if platform::sockets::is_listening(&self.socket_path)? {
                 println!("socket is already listening");
+                writeln!(f, "socket is already listening|").unwrap();
                 return Ok(None);
             }
             println!("socket NOT listening");
+            writeln!(f, "socket is NOT listening but path exists|").unwrap();
             fs::remove_file(&self.socket_path)?;
         }
+        writeln!(f, "binding to socket|").unwrap();
         Ok(Some(UnixListener::bind(&self.socket_path)?))
     }
 }

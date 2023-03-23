@@ -98,6 +98,7 @@ pub unsafe fn get_dl_path_raw(addr: *const libc::c_void) -> (Option<CString>, Op
     (path_name, symbol_name)
 }
 
+#[derive(Debug)]
 pub struct ExecVec<const N: usize> {
     heap_items: SmallVec<[CString; 0]>,
     // Always NULL ptr terminated

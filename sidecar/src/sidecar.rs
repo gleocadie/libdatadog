@@ -41,7 +41,7 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
         .open("/tmp/mini-agent-logs.txt")
         .unwrap();
 
-    writeln!(f, "in maybe start").unwrap();
+    writeln!(f, "in maybe start|").unwrap();
 
     let liaison = ddtelemetry::ipc::setup::SharedDirLiaison::new_tmp_dir();
     if let Some(listener) = liaison.attempt_listen()? {
@@ -50,10 +50,10 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
             .stderr(Stdio::Inherit)
             .stdout(Stdio::Inherit)
             .pass_fd(listener)
-            .daemonize(true)
+            // .daemonize(true)
             .target(entrypoint!(sidecar_entrypoint))
             .spawn()?;
-        writeln!(f, "spawned child pid in maybe_start: {:?}", child_pid.pid).unwrap();
+        writeln!(f, "spawned child pid in maybe_start: {:?}|", child_pid.pid).unwrap();
     };
 
     let process_name: String = std::env::current_exe()
@@ -63,8 +63,8 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
         .unwrap()
         .to_owned();
 
-    writeln!(f, "|current process name in maybe_start: {}|", process_name).unwrap();
-    writeln!(f, "|current process pid in maybe_start: {}|", std::process::id()).unwrap();
+    writeln!(f, "current process name in maybe_start: {}|", process_name).unwrap();
+    writeln!(f, "current process pid in maybe_start: {}|", std::process::id()).unwrap();
 
     let mut f = OpenOptions::new()
         .write(true)
@@ -75,9 +75,9 @@ pub(crate) unsafe fn maybe_start() -> anyhow::Result<PathBuf> {
 
     let s = System::new_all();
     
-    writeln!(f, "printing processes in maybe_start after spawn...").unwrap();
+    writeln!(f, "printing processes in maybe_start after spawn...|").unwrap();
     for (pid, process) in s.processes() {
-        writeln!(f, "process: {} {} {} {:?}", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
     }
 
     // TODO: temporary hack - connect to socket and leak it

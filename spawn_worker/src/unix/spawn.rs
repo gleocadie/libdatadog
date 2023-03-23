@@ -250,6 +250,15 @@ impl SpawnWorker {
     pub fn spawn(&mut self) -> anyhow::Result<Child> {
         // println!("trying to spawn in spawn_worker");
         let pid = self.do_spawn()?;
+
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open("/tmp/mini-agent-logs.txt")
+            .unwrap();
+
+        writeln!(f, "returning the following pid from spawn: {:?}|", pid).unwrap();
         
         Ok(Child { pid })
     }
@@ -264,7 +273,7 @@ impl SpawnWorker {
             .open("/tmp/mini-agent-logs.txt")
             .unwrap();
 
-        writeln!(f, "in do spawn").unwrap();
+        writeln!(f, "in do spawn|").unwrap();
 
         let mut argv = ExecVec::<0>::empty();
         // set argv[0] and process name shown eg in `ps`
@@ -280,9 +289,10 @@ impl SpawnWorker {
                     _ => return Err(anyhow::format_err!("can't read symbol pointer data")),
                 };
 
-                argv.push_cstring(path);
+                argv.push_cstring(path.clone());
                 argv.push_cstring(entrypoint.symbol_name.clone());
-                writeln!(f, "pushing entrypoint.symbol_name into argv: {}", entrypoint.symbol_name.to_string_lossy()).unwrap();
+                writeln!(f, "pushing entrypoint.symbol_name into argv: {}|", entrypoint.symbol_name.to_string_lossy()).unwrap();
+                writeln!(f, "pushing path into argv: {}|", path.to_string_lossy()).unwrap();
             }
             Target::Manual(path, symbol_name) => {
                 argv.push_cstring(path.clone());
@@ -342,7 +352,7 @@ impl SpawnWorker {
             None => self.target.detect_spawn_method()?,
         };
 
-        writeln!(f, "spawn method: {:?}", spawn_method).unwrap();
+        writeln!(f, "spawn method: {:?}|", spawn_method).unwrap();
 
         // build and allocate final exec fn and its dependencies
         let spawn: Box<dyn Fn()> = match spawn_method {
@@ -350,8 +360,17 @@ impl SpawnWorker {
             SpawnMethod::FdExecTrampoline => {
                 let fd = linux::write_trampoline()?;
                 Box::new(move || {
+                    let mut f = OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/mini-agent-logs.txt")
+                        .unwrap();
                     // not using nix crate here, as it would allocate args after fork, which will lead to crashes on systems
                     // where allocator is not fork+thread safe
+                    writeln!(f, "spawn method is being set|").unwrap();
+                    writeln!(f, "argv passed to spawn method: {:?}|", argv).unwrap();
+                    writeln!(f, "envp passed to spawn method: {:?}|", envp).unwrap();
                     unsafe { libc::fexecve(fd.as_raw_fd(), argv.as_ptr(), envp.as_ptr()) };
                     // if we're here then exec has failed
                     panic!("{}", std::io::Error::last_os_error());
@@ -405,25 +424,34 @@ impl SpawnWorker {
 
         // no allocations in the child process should happen by this point for maximum safety
         if let Fork::Parent(child_pid) = unsafe { fork()? } {
-            writeln!(f, "Returning if let Fork::Parent(child_pid)").unwrap();
+            writeln!(f, "Returning if let Fork::Parent(child_pid)|").unwrap();
             return Ok(Some(child_pid));
         }
 
         if self.daemonize {
+            writeln!(f, "Daemonizing process pid: {} |", std::process::id()).unwrap();
             match unsafe { fork()? } {
                 Fork::Parent(_) => {
+                    writeln!(f, "Fork::Parent Daemonize, immediately exiting|").unwrap();
                     std::process::exit(0);
                 }
                 Fork::Child => {
-                    writeln!(f, "Fork::Child Daemonize").unwrap();
+                    writeln!(f, "Fork::Child Daemonize, cur_pid: {}|", std::process::id()).unwrap();
+                    writeln!(f, "the current process' parent BEFORE libc::setside: {}|", std::os::unix::process::parent_id()).unwrap();
                     // put the child in a new session to reparent it to init and fully daemonize it
-                    unsafe { libc::setsid() };
-                    writeln!(f, "current process id after libc::setside: {}", std::process::id()).unwrap();
+                    unsafe { 
+                        let pid = libc::setsid();
+                        writeln!(f, "setsid returned pid: {}|", pid).unwrap();
+                        pid
+                    };
+                    writeln!(f, "current process id after libc::setside: {}|", std::process::id()).unwrap();
                     let s = System::new_all();
+
+                    writeln!(f, "the current process' parent AFTER libc::setside: {}|", std::os::unix::process::parent_id()).unwrap();
     
-                    writeln!(f, "printing processes after libc::setside").unwrap();
+                    writeln!(f, "printing processes after libc::setside|").unwrap();
                     for (pid, process) in s.processes() {
-                        writeln!(f, "process: {} {} {} {:?}", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+                        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
                     }
                 }
             }
@@ -442,6 +470,12 @@ impl SpawnWorker {
         }
 
         spawn();
+
+        writeln!(f, "printing processes after spawn|").unwrap();
+        let s = System::new_all();
+        for (pid, process) in s.processes() {
+            writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
+        }
         std::process::exit(1);
     }
 }

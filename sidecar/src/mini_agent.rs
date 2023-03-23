@@ -259,7 +259,7 @@ pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
         .open("/tmp/mini-agent-logs.txt")
         .unwrap();
 
-    writeln!(f, "in mini_agent main").unwrap();
+    writeln!(f, "in mini_agent main|").unwrap();
 
     // println!("in mini_agent main");
     let (tx, mut rx) = tokio::sync::mpsc::channel::<TracerPayload>(1);
@@ -272,7 +272,7 @@ pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
                 // if there are no connections for 1 second, exit the main loop
                 Some(d) = rx.recv() => {
                     println!("rx.recv has new item. pushing into payloads buffer.");
-                    writeln!(f, "rx.recv has new item. pushing into payloads buffer.").unwrap();
+                    writeln!(f, "rx.recv has new item. pushing into payloads buffer.|").unwrap();
                     payloads.push(d);
                 }
 
@@ -283,7 +283,7 @@ pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
                     match uploader.submit(payloads.drain(..).collect()).await {
                         Ok(()) => {
                             println!("sending trace to trace intake.");
-                            writeln!(f, "sending trace to trace intake.").unwrap();
+                            writeln!(f, "sending trace to trace intake.|").unwrap();
                         },
                         Err(e) => {eprintln!("{:?}", e)}
                     }
@@ -301,8 +301,8 @@ pub(crate) async fn main(listener: UnixListener) -> anyhow::Result<()> {
         .open("/tmp/mini-agent-logs.txt")
         .unwrap();
 
-    writeln!(f, "mini agent PID: {}", process::id()).unwrap();
-    writeln!(f, "timestamp: {}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()).unwrap();
+    writeln!(f, "mini agent PID: {}|", process::id()).unwrap();
+    writeln!(f, "timestamp: {}|", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()).unwrap();
 
     let listener = UnixListenerTracked::from(listener);
     let watcher = listener.watch();
