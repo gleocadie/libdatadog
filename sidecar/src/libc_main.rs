@@ -30,77 +30,16 @@ type MainFn = unsafe extern "C" fn(
 type InitFn = extern "C" fn(ffi::c_int, *const *const ffi::c_char, *const *const ffi::c_char);
 type FiniFn = extern "C" fn();
 
+#[no_mangle]
+pub unsafe extern "C" fn start_mini_agent() {
+    maybe_start().unwrap();
+}
+
 #[cfg(feature = "build_for_node")]
 #[no_mangle]
 #[napi]
-#[allow(improper_ctypes_definitions)]
 unsafe extern "C" fn napi_start_mini_agent() {
-    let mut f = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .append(true)
-        .open("/tmp/mini-agent-logs.txt")
-        .unwrap();
-
-    writeln!(f, "--------------|").unwrap();
-    writeln!(f, "start napi_start_mini_agent()|").unwrap();
-
-    let process_name: String = std::env::current_exe()
-        .ok()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_owned();
-
-    writeln!(f, "current process name: {}|", process_name).unwrap();
-    writeln!(f, "current process pid: {}|", std::process::id()).unwrap();
-
-    let env = raw_env::as_clist();
-    let path = match maybe_start() {
-        Ok(p) => {
-            writeln!(f, "maybe_start was successful|").unwrap();
-            p
-        },
-        Err(e) => {
-            writeln!(f, "Panicking: error maybe starting: {}|", e).unwrap();
-            println!("Panicking: error maybe starting: {}|", e);
-            panic!("Error maybe starting");
-        },
-    };
-
-    let mut env: ExecVec<10> = env.into_exec_vec();
-
-    env.push_cstring(
-        CString::new(format!(
-            "DD_TRACE_AGENT_URL=unix://{}",
-            path.to_string_lossy()
-        ))
-        .expect("extra null found in in new env variable"),
-    );
-
-    writeln!(f, "{}", format!(
-        "DD_TRACE_AGENT_URL=unix://{}|",
-        path.to_string_lossy()
-    )).unwrap();
-
-    let s = System::new_all();
-
-    writeln!(f, "printing processes in end of napi_start_mini_agent BEFORE wait...|").unwrap();
-    for (pid, process) in s.processes() {
-        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
-    }
-
-    thread::sleep(Duration::from_secs(2));
-    
-    writeln!(f, "printing processes in end of napi_start_mini_agent AFTER wait...|").unwrap();
-    for (pid, process) in s.processes() {
-        writeln!(f, "process: {} {} {} {:?}|", pid, process.exe().to_string_lossy(), process.name(), process.status()).unwrap();
-    }
-    
-    writeln!(f, "current process before ending napi_start: {}|", std::process::id()).unwrap();
-
-    writeln!(f, "end napi_start_mini_agent()|").unwrap();
-    writeln!(f, "--------------|").unwrap();
+    maybe_start().unwrap();
 }
 
 #[allow(dead_code)]
@@ -109,30 +48,9 @@ unsafe extern "C" fn new_main(
     argv: *const *const ffi::c_char,
     _envp: *const *const ffi::c_char,
 ) -> ffi::c_int {
-    // println!("in new main");
-
-    let mut f = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .append(true)
-        .open("/tmp/mini-agent-logs.txt")
-        .unwrap();
-
-    writeln!(f, "--------------").unwrap();
-    writeln!(f, "in new main").unwrap();
-
+    let path = maybe_start().unwrap();
 
     let mut env = raw_env::as_clist();
-    let path = match maybe_start() {
-        Ok(p) => {
-            writeln!(f, "maybe_start was successful").unwrap();
-            p
-        },
-        Err(e) => {
-            writeln!(f, "Panicking: error maybe starting: {}", e).unwrap();
-            panic!("Error maybe starting");
-        },
-    };
     env.remove_entry(|e| e.starts_with("LD_PRELOAD=".as_bytes()));
 
     let mut env: ExecVec<10> = env.into_exec_vec();
@@ -150,19 +68,7 @@ unsafe extern "C" fn new_main(
         path.to_string_lossy()
     ));
 
-    writeln!(f, "{}", format!(
-        "DD_TRACE_AGENT_URL=unix://{}",
-        path.to_string_lossy()
-    )).unwrap();
-
     let old_environ = raw_env::swap(env.as_ptr());
-
-    let s = System::new_all();
-    
-    writeln!(f, "printing processes in end of new_main...").unwrap();
-    for (pid, process) in s.processes() {
-        writeln!(f, "process: {} {}", pid, process.exe().to_string_lossy()).unwrap();
-    }
 
     let rv = match unsafe { ORIGINAL_MAIN } {
         Some(main) => main(argc, argv, env.as_ptr()),
