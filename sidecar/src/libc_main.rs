@@ -63,11 +63,6 @@ unsafe extern "C" fn new_main(
         .expect("extra null found in in new env variable"),
     );
 
-    println!("{}", format!(
-        "DD_TRACE_AGENT_URL=unix://{}",
-        path.to_string_lossy()
-    ));
-
     let old_environ = raw_env::swap(env.as_ptr());
 
     let rv = match unsafe { ORIGINAL_MAIN } {
@@ -92,31 +87,23 @@ pub unsafe extern "C" fn __libc_start_main(
     fini: FiniFn,
     rtld_fini: FiniFn,
     stack_end: *const ffi::c_void,
-) { 
+) {
     let libc_start_main =
         spawn_worker::utils::dlsym::<StartMainFn>(libc::RTLD_NEXT, cstr!("__libc_start_main"))
             .unwrap();
     ORIGINAL_MAIN = Some(main);
     // #[cfg(not(test))]
-    // println!("starting new_main");
-    // #[cfg(not(test))]
     // libc_start_main(new_main, argc, argv, init, fini, rtld_fini, stack_end);
     // #[cfg(test)]
     // libc_start_main(
-    //     unsafe { ORIGINAL_MAIN.unwrap() },
+    //     ORIGINAL_MAIN.unwrap(),
     //     argc,
     //     argv,
     //     init,
     //     fini,
     //     rtld_fini,
     //     stack_end,
-    // );
-
-    // the pointer to envp is the next integer after argv
-    // it's a null-terminated array of strings
-    // Note: for some reason setting a new env in new_main didn't work,
-    // as the subprocesses spawned by this process still contain LD_PRELOAD,
-    // but removing it here does indeed work
+    // )
 
     let mut f = OpenOptions::new()
         .write(true)
@@ -134,15 +121,11 @@ pub unsafe extern "C" fn __libc_start_main(
 
     writeln!(f, "| ld_preload at timestamp: {:?}, for process named: {} and with pid: {} |\n", time, current_process, process::id()).unwrap();
 
-    // libc_start_main(
-    //     ORIGINAL_MAIN.unwrap(),
-    //     argc,
-    //     argv,
-    //     init,
-    //     fini,
-    //     rtld_fini,
-    //     stack_end,
-    // )
+    // the pointer to envp is the next integer after argv
+    // it's a null-terminated array of strings
+    // Note: for some reason setting a new env in new_main didn't work,
+    // as the subprocesses spawned by this process still contain LD_PRELOAD,
+    // but removing it here does indeed work
 
     let envp_ptr = argv.offset(argc as isize + 1) as *mut *const ffi::c_char;
     let mut env_vec = CListMutPtr::from_raw_parts(envp_ptr);

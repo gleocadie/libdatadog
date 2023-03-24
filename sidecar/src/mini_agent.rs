@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::future::Future;
-use std::net::SocketAddr;
 use std::io::Write;
 use std::pin::Pin;
-use std::{process, fs};
+use std::process;
 use std::task::Poll;
 use std::time::{Duration, SystemTime};
 
@@ -74,6 +73,7 @@ impl Service<Request<Body>> for MiniAgent {
             // exit, shutting down the subprocess process.
             (&Method::GET, "/exit") => {
                 println!("/exit called. shutting down.");
+                writeln!(f, "/exit called. shutting down.").unwrap();
                 std::process::exit(0);
             }
             // node.js does put while Go does POST whoa
