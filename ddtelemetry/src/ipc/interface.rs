@@ -8,6 +8,12 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex, MutexGuard},
 };
+use std::ffi::c_void;
+use std::hash::Hash;
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use anyhow::Result;
 
@@ -17,11 +23,15 @@ use futures::{
     FutureExt,
 };
 use manual_future::ManualFuture;
+use nix::fcntl::OFlag;
+use nix::sys::mman::{MapFlags, mmap, munmap, ProtFlags, shm_open};
+use nix::sys::stat::Mode;
 
 use datadog_ipc::tarpc::{context::Context, server::Channel};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::net::UnixStream;
+use tokio::time::sleep;
 
 use crate::{
     config::Config,
@@ -50,6 +60,11 @@ pub trait TelemetryInterface {
     async fn shutdown_runtime(instance_id: InstanceId);
     async fn shutdown_session(session_id: String);
     async fn ping();
+    async fn register_profiling_interrupt_shared_mapping(
+        instance_id: InstanceId,
+        path: PathBuf,
+        offset: usize
+    );
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
@@ -192,6 +207,41 @@ enum AppOrQueue {
     Queue(EnqueuedData),
 }
 
+pub async fn profiler_interrupter(server: TelemetryServer) {
+    loop {
+        sleep(Duration::from_millis(10000)).await;
+        for vm_interrupt in server.vm_interrupts.lock().unwrap().values() {
+            vm_interrupt.update();
+        }
+    }
+}
+
+struct VmInterrupt {
+    mmap: *mut c_void,
+    interrupt: *mut AtomicBool,
+}
+
+unsafe impl Send for VmInterrupt {}
+
+impl Drop for VmInterrupt {
+    fn drop(&mut self) {
+        unsafe { let _ = munmap(self.mmap, 0x1000); }
+    }
+}
+
+impl VmInterrupt {
+    fn new(ptr: *mut c_void, offset: usize) -> VmInterrupt {
+        VmInterrupt {
+            mmap: ptr,
+            interrupt: ((ptr as usize) + offset) as *mut AtomicBool,
+        }
+    }
+
+    fn update(&self) {
+        unsafe { (*self.interrupt).store(true, Ordering::SeqCst) };
+    }
+}
+
 #[derive(Clone, Default)]
 struct RuntimeInfo {
     apps: Arc<Mutex<HashMap<String, AppInstance>>>,
@@ -287,6 +337,7 @@ impl EnqueuedData {
 #[derive(Default, Clone)]
 pub struct TelemetryServer {
     sessions: Arc<Mutex<HashMap<String, SessionInfo>>>,
+    vm_interrupts: Arc<Mutex<HashMap<String, VmInterrupt>>>,
 }
 
 impl TelemetryServer {
@@ -403,6 +454,8 @@ impl TelemetryInterface for TelemetryServer {
 
     type ShutdownRuntimeFut = NoResponse;
     fn shutdown_runtime(self, _: Context, instance_id: InstanceId) -> Self::ShutdownRuntimeFut {
+        self.vm_interrupts.lock().unwrap().remove(&instance_id.runtime_id);
+
         let session = self.get_session(&instance_id.session_id);
         tokio::spawn(async move { session.shutdown_runtime(&instance_id.runtime_id).await });
 
@@ -518,6 +571,24 @@ impl TelemetryInterface for TelemetryServer {
             no_response().await
         })
     }
+
+    type RegisterProfilingInterruptSharedMappingFut = NoResponse;
+
+    fn register_profiling_interrupt_shared_mapping(
+        self,
+        _: Context,
+        instance_id: InstanceId,
+        path: PathBuf,
+        offset: usize,
+    ) -> Self::RegisterProfilingInterruptSharedMappingFut {
+        if let Ok(fd) = shm_open(&path, OFlag::O_RDWR, Mode::empty()) {
+            if let Ok(ptr) = unsafe { mmap(None, NonZeroUsize::new(0x1000).unwrap(), ProtFlags::PROT_READ | ProtFlags::PROT_WRITE, MapFlags::MAP_SHARED, fd, 0) } {
+                self.vm_interrupts.lock().unwrap().insert(instance_id.runtime_id, VmInterrupt::new(ptr, offset));
+            }
+        }
+
+        no_response()
+    }
 }
 
 pub mod blocking {
@@ -526,6 +597,7 @@ pub mod blocking {
         io,
         time::{Duration, Instant},
     };
+    use std::path::PathBuf;
 
     use datadog_ipc::transport::blocking::BlockingTransport;
 
@@ -602,6 +674,20 @@ pub mod blocking {
         Ok(Instant::now()
             .checked_duration_since(start)
             .unwrap_or_default())
+    }
+
+    // TODO: needs something different to instance id, like a thread id
+    pub fn register_profiling_interrupt_shared_mapping(
+        transport: &mut TelemetryTransport,
+        instance_id: &InstanceId,
+        path: PathBuf,
+        offset: usize
+    ) -> io::Result<()> {
+        transport.send(TelemetryInterfaceRequest::RegisterProfilingInterruptSharedMapping {
+            instance_id: instance_id.clone(),
+            path,
+            offset,
+        })
     }
 }
 

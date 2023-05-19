@@ -22,7 +22,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::ipc::interface::blocking::TelemetryTransport;
-use crate::ipc::interface::TelemetryServer;
+use crate::ipc::interface::{profiler_interrupter, TelemetryServer};
 use datadog_ipc::platform::Channel as IpcChannel;
 
 use crate::ipc::setup::{self, Liaison};
@@ -62,9 +62,11 @@ async fn main_loop(listener: UnixListener) -> tokio::io::Result<()> {
         tracing::info!("Received Ctrl-C Signal, shutting down");
         cloned_token.cancel();
     });
-
+    
     let server = TelemetryServer::default();
     let (shutdown_complete_tx, mut shutdown_complete_rx) = mpsc::channel::<()>(1);
+
+    tokio::spawn(profiler_interrupter(server.clone()));
 
     loop {
         let (socket, _) = select! {
