@@ -5,7 +5,7 @@ use hyper::{Body, Client, Method, Request, Response};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
+    
 #[cfg(not(test))]
 use std::process;
 
@@ -56,6 +56,10 @@ pub struct ServerlessEnvVerifier {}
 #[async_trait]
 impl EnvVerifier for ServerlessEnvVerifier {
     async fn verify_environment(&self, verify_env_timeout: u64) -> trace_utils::MiniAgentMetadata {
+        if cfg!(debug_assertions) {
+            return trace_utils::MiniAgentMetadata::default();
+        }
+        
         let gcp_metadata_request =
             ensure_gcp_function_environment(Box::new(GoogleMetadataClientWrapper {}));
         let gcp_metadata = match tokio::time::timeout(
