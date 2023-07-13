@@ -71,7 +71,8 @@ struct Mapping {
 
 #[derive(Eq, PartialEq, Hash)]
 struct Sample {
-    pub stack: Stack,
+    // This is an index into the stacks set; FIXME explain why this is different from pprof and API
+    pub stack_id: usize,
 
     /// label includes additional context for this sample. It can include
     /// things like a thread id, allocation size, etc
@@ -122,6 +123,7 @@ pub struct Profile {
     locations: FxIndexSet<Location>,
     functions: FxIndexSet<Function>,
     strings: FxIndexSet<String>,
+    stacks: FxIndexSet<Stack>,
     start_time: SystemTime,
     period: Option<(i64, ValueType)>,
     endpoints: Endpoints,
@@ -390,6 +392,7 @@ impl Profile {
             locations: Default::default(),
             functions: Default::default(),
             strings: Default::default(),
+            stacks: Default::default(),
             start_time,
             period: None,
             endpoints: Default::default(),
@@ -505,9 +508,10 @@ impl Profile {
         }
 
         let stack = Stack { locations };
+        let stack_id = self.stacks.dedup(stack);
 
         let s = Sample {
-            stack,
+            stack_id,
             labels,
             local_root_span_id_label_offset,
         };
@@ -819,7 +823,8 @@ impl TryFrom<&Profile> for pprof::Profile {
                 let new_values = profile.upscale_values(values.as_ref(), labels.as_ref())?;
 
                 Ok(pprof::Sample {
-                    location_ids: sample.stack.locations.iter().map(Into::into).collect(),
+                    // FIXME: Replace unwrap with returning an error
+                    location_ids: profile.stacks.get_index(sample.stack_id).unwrap().locations.iter().map(Into::into).collect(),
                     values: new_values,
                     labels,
                 })
