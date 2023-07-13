@@ -568,10 +568,10 @@ impl Profile {
 
             // If you refactor this push, ensure the local_root_span_id_label_offset is correct.
             labels.push(Label {
-                key,
-                str,
+                key: key as i32,
+                str: str as i32,
                 num: label.num,
-                num_unit,
+                num_unit: num_unit as i32,
             });
         }
         Ok((labels, local_root_span_id_label_offset))
@@ -721,7 +721,7 @@ impl Profile {
     /// Hence, the return type of Result<Option<_>, _>.
     fn get_endpoint_for_label(&self, label: &Label) -> anyhow::Result<Option<i64>> {
         anyhow::ensure!(
-            label.key == self.endpoints.local_root_span_id_label,
+            label.key as i64 == self.endpoints.local_root_span_id_label,
             "bug: get_endpoint_for_label should only be called on labels with the key \"local root span id\", called on label with key \"{}\"",
             &self.strings[label.key as usize]
         );
@@ -753,7 +753,7 @@ impl Profile {
             // get bylabel rules first (if any)
             let mut group_of_rules = labels
                 .iter()
-                .filter_map(|label| self.upscaling_rules.get(&(label.key, label.str)))
+                .filter_map(|label| self.upscaling_rules.get(&(label.key.into(), label.str.into())))
                 .collect::<Vec<&Vec<UpscalingRule>>>();
 
             // get byvalue rules if any
@@ -812,8 +812,8 @@ impl TryFrom<&Profile> for pprof::Profile {
                     let lrsi_label = unsafe { sample.labels.get_unchecked(offset) };
                     if let Some(endpoint_value_id) = profile.get_endpoint_for_label(lrsi_label)? {
                         labels.push(Label {
-                            key: profile.endpoints.endpoint_label,
-                            str: endpoint_value_id,
+                            key: profile.endpoints.endpoint_label as i32,
+                            str: endpoint_value_id as i32,
                             num: 0,
                             num_unit: 0,
                         });
@@ -2409,7 +2409,7 @@ mod api_test {
         let expected_labels = [
             [
                 pprof::Label {
-                    key: local_root_span_id,
+                    key: local_root_span_id as i32,
                     str: 0,
                     num: 10,
                     num_unit: 0,
@@ -2418,7 +2418,7 @@ mod api_test {
             ],
             [
                 pprof::Label {
-                    key: local_root_span_id,
+                    key: local_root_span_id as i32,
                     str: 0,
                     num: large_num,
                     num_unit: 0,
