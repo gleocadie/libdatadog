@@ -71,9 +71,7 @@ struct Mapping {
 
 #[derive(Eq, PartialEq, Hash)]
 struct Sample {
-    /// The ids recorded here correspond to a Profile.location.id.
-    /// The leaf is at location_id[0].
-    pub locations: Vec<PProfId>,
+    pub stack: Stack,
 
     /// label includes additional context for this sample. It can include
     /// things like a thread id, allocation size, etc
@@ -81,6 +79,13 @@ struct Sample {
 
     /// Offset into `labels` for the label with key == "local root span id".
     local_root_span_id_label_offset: Option<usize>,
+}
+
+#[derive(Eq, PartialEq, Hash)]
+struct Stack {
+    /// The ids recorded here correspond to a Profile.location.id.
+    /// The leaf is at location_id[0].
+    pub locations: Vec<PProfId>,
 }
 
 pub struct UpscalingRule {
@@ -499,8 +504,10 @@ impl Profile {
             locations.push(PProfId(index + 1))
         }
 
+        let stack = Stack { locations };
+
         let s = Sample {
-            locations,
+            stack,
             labels,
             local_root_span_id_label_offset,
         };
@@ -812,7 +819,7 @@ impl TryFrom<&Profile> for pprof::Profile {
                 let new_values = profile.upscale_values(values.as_ref(), labels.as_ref())?;
 
                 Ok(pprof::Sample {
-                    location_ids: sample.locations.iter().map(Into::into).collect(),
+                    location_ids: sample.stack.locations.iter().map(Into::into).collect(),
                     values: new_values,
                     labels,
                 })
