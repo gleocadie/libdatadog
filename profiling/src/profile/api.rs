@@ -314,17 +314,17 @@ impl<'a> TryFrom<&'a pprof::Profile> for Profile<'a> {
             let mut labels = Vec::with_capacity(sample.labels.len());
             for label in sample.labels.iter() {
                 labels.push(Label {
-                    key: string_table_fetch(pprof, label.key.into())?,
+                    key: string_table_fetch(pprof, label.key)?,
                     str: if label.str == 0 {
                         None
                     } else {
-                        Some(string_table_fetch(pprof, label.str.into())?)
+                        Some(string_table_fetch(pprof, label.str)?)
                     },
                     num: label.num,
                     num_unit: if label.num_unit == 0 {
                         None
                     } else {
-                        Some(string_table_fetch(pprof, label.num_unit.into())?)
+                        Some(string_table_fetch(pprof, label.num_unit)?)
                     },
                 })
             }

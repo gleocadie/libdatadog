@@ -74,21 +74,21 @@ pub struct ValueType {
 /// Currently, libdatadog only allows string values in labels.
 #[derive(Clone, Eq, PartialEq, Hash, ::prost::Message)]
 pub struct Label {
-    #[prost(int32, tag = "1")]
-    pub(crate) key: i32, // Index into string table
-    #[prost(int32, tag = "2")]
-    pub(crate) str: i32, // Index into string table
+    #[prost(int64, tag = "1")]
+    pub(crate) key: i64, // Index into string table
+    #[prost(int64, tag = "2")]
+    pub(crate) str: i64, // Index into string table
     #[prost(int64, tag = "3")]
     pub num: i64,
-    #[prost(int32, tag = "4")]
-    pub num_unit: i32,
+    #[prost(int64, tag = "4")]
+    pub num_unit: i64,
 }
 
 impl Label {
     pub fn str(key: i64, str: i64) -> Self {
         Self {
-            key: key as i32,
-            str: str as i32,
+            key,
+            str,
             num: 0,
             num_unit: 0,
         }
