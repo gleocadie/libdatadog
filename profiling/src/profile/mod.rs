@@ -71,8 +71,10 @@ struct Mapping {
 
 #[derive(Eq, PartialEq, Hash)]
 struct Sample {
-    // This is an index into the stacks set; FIXME explain why this is different from pprof and API
-    pub stack_id: usize,
+    /// This is an index into the stacks set; this allows us to de-duplicate
+    /// samples that share the same stack, even though they may have different
+    /// labels.
+    pub stack_id: u32,
 
     /// label includes additional context for this sample. It can include
     /// things like a thread id, allocation size, etc
@@ -507,11 +509,11 @@ impl Profile {
             locations.push(PProfId(index + 1))
         }
 
-        let stack = Stack { locations };
-        let stack_id = self.stacks.dedup(stack);
+        let stack_id = self.stacks.dedup(Stack { locations });
 
         let s = Sample {
-            stack_id,
+            // FIXME: Replace unwrap panic with actually returning error to caller
+            stack_id: stack_id.try_into().unwrap(),
             labels,
             local_root_span_id_label_offset,
         };
@@ -824,7 +826,7 @@ impl TryFrom<&Profile> for pprof::Profile {
 
                 Ok(pprof::Sample {
                     // FIXME: Replace unwrap with returning an error
-                    location_ids: profile.stacks.get_index(sample.stack_id).unwrap().locations.iter().map(Into::into).collect(),
+                    location_ids: profile.stacks.get_index(sample.stack_id.try_into().unwrap()).unwrap().locations.iter().map(Into::into).collect(),
                     values: new_values,
                     labels,
                 })
