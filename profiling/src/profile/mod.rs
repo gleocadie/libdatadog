@@ -509,11 +509,13 @@ impl Profile {
             locations.push(PProfId(index + 1))
         }
 
-        let stack_id = self.stacks.dedup(Stack { locations });
+        let stack_id: u32 = match self.stacks.dedup(Stack { locations }).try_into() {
+            Ok(stack_id) => stack_id,
+            Err(e) => { return Err(e.into()); }
+        };
 
         let s = Sample {
-            // FIXME: Replace unwrap panic with actually returning error to caller
-            stack_id: stack_id.try_into().unwrap(),
+            stack_id: stack_id,
             labels,
             local_root_span_id_label_offset,
         };
@@ -824,9 +826,20 @@ impl TryFrom<&Profile> for pprof::Profile {
 
                 let new_values = profile.upscale_values(values.as_ref(), labels.as_ref())?;
 
+                let stack_id_as_usize: usize = match sample.stack_id.try_into() {
+                    Ok(stack_id) => stack_id,
+                    Err(e) => { return Err(e.into()); }
+                };
+
+                let stack = match profile.stacks.get_index(stack_id_as_usize) {
+                    Some(stack) => stack,
+                    None => { return Err("BUG: Stack missing for stack_id"); }
+                };
+                // let stack: Stack = match self.
+
                 Ok(pprof::Sample {
                     // FIXME: Replace unwrap with returning an error
-                    location_ids: profile.stacks.get_index(sample.stack_id.try_into().unwrap()).unwrap().locations.iter().map(Into::into).collect(),
+                    location_ids: profile.stacks.get_index(stack_id_as_usize).unwrap().locations.iter().map(Into::into).collect(),
                     values: new_values,
                     labels,
                 })
