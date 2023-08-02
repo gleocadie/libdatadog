@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc::{self, Receiver, Sender};
+use std::{thread, time};
 
 use crate::http_utils::log_and_create_http_response;
 use crate::{config, env_verifier, stats_flusher, stats_processor, trace_flusher, trace_processor};
@@ -47,6 +48,9 @@ impl MiniAgent {
                 )
                 .await,
         );
+
+        let ten_millis = time::Duration::from_secs(5);
+        thread::sleep(ten_millis);
 
         debug!(
             "Time taken to fetch Mini Agent metadata: {} ms",

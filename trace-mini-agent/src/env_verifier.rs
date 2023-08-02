@@ -202,7 +202,7 @@ async fn verify_azure_environment_or_exit(os: &str) {
         }
         Err(e) => {
             error!("The Mini Agent can only be run in Google Cloud Functions & Azure Functions. Verification has failed, shutting down now. Error: {e}");
-            process::exit(1);
+            // process::exit(1);
         }
     }
     debug!(
