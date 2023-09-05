@@ -128,10 +128,17 @@ fn main() -> anyhow::Result<()> {
                 .help("the path to save the result to")
                 .required(false),
         )
+        .arg(
+            Arg::new("newoutput")
+                .short('n')
+                .help("the path to save the result to")
+                .required(false),
+        )
         .get_matches();
 
     let input = matches.get_one::<String>("input").unwrap();
     let output = matches.get_one::<String>("output");
+    let n = matches.get_one::<String>("newoutput");
     let collect_memory_stats = matches.get_flag("mem");
     let mut sysinfo = if collect_memory_stats {
         Some(Sysinfo::new())
@@ -206,6 +213,16 @@ fn main() -> anyhow::Result<()> {
         }
 
         std::fs::write(file, encoded.buffer)?;
+    }
+
+    if let Some(file) = n {
+        println!("Writing out not a pprof to file {file}");
+        let encoded = outprof.serialize2()?;
+        if let Some(s) = &mut sysinfo {
+            s.measure_memory("After serializing");
+        }
+
+        std::fs::write(file, encoded)?;
     }
 
     if let Some(s) = &mut sysinfo {
