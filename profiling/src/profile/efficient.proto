@@ -39,6 +39,8 @@
 syntax = "proto3";
 
 package efficient;
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 message Profile {
   repeated Function functions = 1;
@@ -50,6 +52,9 @@ message Profile {
   repeated ValueType sample_types = 7;
   repeated StackTrace stack_traces = 8;
   repeated string strings = 9;
+  google.protobuf.Timestamp start_time = 10;
+  google.protobuf.Timestamp end_time = 11;
+  google.protobuf.Duration duration = 12;
 }
 
 message Function {

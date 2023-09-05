@@ -59,6 +59,9 @@ impl From<Profile> for serializer::Profile {
             sample_types: p.sample_types.into_iter().map(|i| i.into()).collect(),
             stack_traces: p.stack_traces.into_iter().map(|i| i.into()).collect(),
             strings: p.strings.into_iter().collect(),
+            duration: None,
+            start_time: Some(p.start_time.into()),
+            end_time: None,
         }
     }
 }
@@ -454,8 +457,19 @@ impl Profile {
         Ok(())
     }
 
-    pub fn serialize2(self) -> anyhow::Result<Vec<u8>> {
-        let profile: serializer::Profile = self.into();
+    pub fn serialize2(
+        self,
+        end_time: Option<SystemTime>,
+        duration: Option<Duration>,
+    ) -> anyhow::Result<Vec<u8>> {
+        let mut profile: serializer::Profile = self.into();
+        profile.end_time = Some(end_time.unwrap_or_else(SystemTime::now).into());
+        profile.duration = if let Some(duration) = duration {
+            Some(duration.try_into()?)
+        } else {
+            None
+        };
+        //profile.duration = duration.map(|t| );
 
         // On 2023-08-23, we analyzed the uploaded tarball size per language.
         // These tarballs include 1 or more profiles, but for most languages
@@ -486,7 +500,7 @@ impl Profile {
         end_time: Option<SystemTime>,
         duration: Option<Duration>,
     ) -> anyhow::Result<EncodedProfile> {
-        let end = end_time.unwrap_or_else(SystemTime::now);
+        let end: SystemTime = end_time.unwrap_or_else(SystemTime::now);
         let start = self.start_time;
         let mut profile: pprof::Profile = self.try_into()?;
 

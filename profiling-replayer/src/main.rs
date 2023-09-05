@@ -217,7 +217,7 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(file) = n {
         println!("Writing out not a pprof to file {file}");
-        let encoded = outprof.serialize2()?;
+        let encoded = outprof.serialize2(Some(replayer.start_time), Some(replayer.duration))?;
         if let Some(s) = &mut sysinfo {
             s.measure_memory("After serializing");
         }
