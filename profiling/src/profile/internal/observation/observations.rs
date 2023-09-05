@@ -5,7 +5,7 @@
 
 use super::super::Sample;
 use super::trimmed_observation::{ObservationLength, TrimmedObservation};
-use crate::profile::Timestamp;
+use crate::profile::{Timestamp, TimestampedObservation};
 use std::collections::HashMap;
 
 struct NonEmptyObservations {
@@ -80,6 +80,21 @@ impl Observations {
                     (*sample, ts, unsafe { obs.as_slice(obs_len) })
                 })
         })
+    }
+
+    //TODO TEST THIS WITH MIRI
+    pub fn into_iter(self) -> impl IntoIterator<Item = (Sample, Option<Timestamp>, Vec<i64>)> {
+        unsafe {
+            self.inner.into_iter().flat_map(|mut observations| unsafe {
+                let td = std::mem::take(&mut observations.timestamped_data);
+                let ad = std::mem::take(&mut observations.aggregated_data);
+                let td_it = td.into_iter().map(|(s, t, o)| (s, Some(t), o));
+                let ad_it = ad.into_iter().map(|(s, o)| (s, None, o));
+                td_it
+                    .chain(ad_it)
+                    .map(|(s, t, o)| (s, t, o.into_vec(observations.obs_len)))
+            })
+        }
     }
 
     pub fn drain(&mut self) -> Drain {

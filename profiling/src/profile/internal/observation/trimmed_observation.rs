@@ -12,7 +12,7 @@ use std::mem;
 /// slice are the same as when we trimmed it.
 #[repr(transparent)]
 #[derive(Copy, Clone, Default)]
-pub(super) struct ObservationLength(usize);
+pub(super) struct ObservationLength(pub usize);
 
 impl ObservationLength {
     pub fn assert_eq(&self, other: usize) {
@@ -84,6 +84,14 @@ impl TrimmedObservation {
         // ourselves.
         let data = p as *mut i64;
         Self { data }
+    }
+
+    /// Safety: the ObservationLength must have come from the same profile as the Observation
+    pub unsafe fn into_vec2(mut self, len: usize) -> Vec<i64> {
+        unsafe {
+            // We built this from a vec.  Put it back together again.
+            Vec::from_raw_parts(mem::replace(&mut self.data, std::ptr::null_mut()), len, len)
+        }
     }
 
     /// Safety: the ObservationLength must have come from the same profile as the Observation
