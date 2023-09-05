@@ -16,6 +16,14 @@ impl Item for Sample {
     type Id = SampleId;
 }
 
+impl From<Sample> for crate::profile::serializer::Sample {
+    fn from(s: Sample) -> Self {
+        let labels = s.labels.into_raw_id() as u32;
+        let stacktrace = s.stacktrace.into_raw_id() as u32;
+        Self { labels, stacktrace }
+    }
+}
+
 impl Sample {
     pub fn new(labels: LabelSetId, stacktrace: StackTraceId) -> Self {
         Self { labels, stacktrace }

@@ -31,6 +31,18 @@ impl Item for Mapping {
     type Id = MappingId;
 }
 
+impl From<Mapping> for crate::profile::serializer::Mapping {
+    fn from(m: Mapping) -> Self {
+        Self {
+            memory_start: m.memory_start,
+            memory_limit: m.memory_limit,
+            file_offset: m.file_offset,
+            filename: m.filename.to_raw_id() as u32,
+            build_id: m.build_id.to_raw_id() as u32,
+        }
+    }
+}
+
 impl PprofItem for Mapping {
     type PprofMessage = pprof::Mapping;
 

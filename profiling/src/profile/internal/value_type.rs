@@ -9,6 +9,15 @@ pub struct ValueType {
     pub unit: StringId,
 }
 
+impl From<ValueType> for crate::profile::serializer::ValueType {
+    fn from(vt: ValueType) -> Self {
+        Self {
+            r#type: vt.r#type.to_raw_id() as u32,
+            unit: vt.unit.to_raw_id() as u32,
+        }
+    }
+}
+
 impl From<ValueType> for pprof::ValueType {
     fn from(vt: ValueType) -> Self {
         Self::from(&vt)

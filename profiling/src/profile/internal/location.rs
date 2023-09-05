@@ -21,6 +21,17 @@ impl Item for Location {
     type Id = LocationId;
 }
 
+impl From<Location> for crate::profile::serializer::Location {
+    fn from(l: Location) -> Self {
+        Self {
+            mapping_id: l.mapping_id.to_raw_id() as u32,
+            function_id: l.function_id.to_raw_id() as u32,
+            address: l.address,
+            line: l.line,
+        }
+    }
+}
+
 impl PprofItem for Location {
     type PprofMessage = pprof::Location;
 

@@ -19,6 +19,17 @@ impl Item for Function {
     type Id = FunctionId;
 }
 
+impl From<Function> for crate::profile::serializer::Function {
+    fn from(f: Function) -> Self {
+        Self {
+            name: f.name.to_raw_id() as u32,
+            system_name: f.system_name.to_raw_id() as u32,
+            filename: f.filename.to_raw_id() as u32,
+            start_line: f.start_line,
+        }
+    }
+}
+
 impl PprofItem for Function {
     type PprofMessage = pprof::Function;
 

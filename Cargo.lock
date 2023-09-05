@@ -617,6 +617,7 @@ dependencies = [
  "mime_guess",
  "percent-encoding",
  "prost",
+ "prost-build",
  "rustc-hash",
  "serde",
  "serde_json",

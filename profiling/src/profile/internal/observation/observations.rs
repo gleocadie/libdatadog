@@ -81,6 +81,48 @@ impl Observations {
                 })
         })
     }
+
+    pub fn drain(&mut self) -> Drain {
+        if let Some(observations) = &mut self.inner {
+            Drain {
+                ad: Some(observations.aggregated_data.drain()),
+                td: Some(observations.timestamped_data.drain(..)),
+                obs_len: Some(observations.obs_len),
+            }
+        } else {
+            Drain {
+                ad: None,
+                td: None,
+                obs_len: None,
+            }
+        }
+    }
+}
+
+pub struct Drain<'a> {
+    ad: Option<std::collections::hash_map::Drain<'a, Sample, TrimmedObservation>>,
+    td: Option<std::vec::Drain<'a, (Sample, std::num::NonZeroI64, TrimmedObservation)>>,
+    obs_len: Option<ObservationLength>,
+}
+
+impl<'a> Iterator for Drain<'a> {
+    type Item = (Sample, Option<Timestamp>, Vec<i64>);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(ad) = &mut self.ad {
+            let r = ad.next();
+            if r.is_some() {
+                return r.map(|(s, o)| (s, None, unsafe { o.into_vec(self.obs_len.unwrap()) }));
+            }
+        }
+        if let Some(td) = &mut self.td {
+            let r = td.next();
+            if r.is_some() {
+                return r
+                    .map(|(s, t, o)| (s, Some(t), unsafe { o.into_vec(self.obs_len.unwrap()) }));
+            }
+        }
+        None
+    }
 }
 
 impl Drop for NonEmptyObservations {

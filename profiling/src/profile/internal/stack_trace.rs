@@ -10,6 +10,17 @@ pub struct StackTrace {
     pub locations: Vec<LocationId>,
 }
 
+impl From<StackTrace> for crate::profile::serializer::StackTrace {
+    fn from(s: StackTrace) -> Self {
+        let locations = s
+            .locations
+            .into_iter()
+            .map(|l| l.to_raw_id() as u32)
+            .collect();
+        Self { locations }
+    }
+}
+
 impl Item for StackTrace {
     type Id = StackTraceId;
 }

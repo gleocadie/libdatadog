@@ -50,6 +50,26 @@ impl Label {
     }
 }
 
+impl From<Label> for crate::profile::serializer::Label {
+    fn from(l: Label) -> Self {
+        let key = l.key.to_raw_id() as u32;
+        match l.value {
+            LabelValue::Str(str) => Self {
+                key,
+                str: str.to_raw_id() as u32,
+                num: 0,
+                num_unit: 0,
+            },
+            LabelValue::Num { num, num_unit } => Self {
+                key,
+                str: 0,
+                num,
+                num_unit: num_unit.map_or(0, |u| u.to_raw_id() as u32),
+            },
+        }
+    }
+}
+
 impl From<Label> for pprof::Label {
     fn from(l: Label) -> Self {
         Self::from(&l)
@@ -109,6 +129,18 @@ impl LabelId {
 pub struct LabelSet {
     // Guaranteed to be sorted by [Self::new]
     sorted_labels: Box<[LabelId]>,
+}
+
+impl From<LabelSet> for crate::profile::serializer::LabelSet {
+    fn from(ls: LabelSet) -> Self {
+        Self {
+            labels: ls
+                .sorted_labels
+                .iter()
+                .map(|l| l.to_raw_id() as u32)
+                .collect(),
+        }
+    }
 }
 
 impl LabelSet {

@@ -5,6 +5,7 @@ pub mod api;
 pub mod internal;
 pub mod pprof;
 pub mod profiled_endpoints;
+pub mod serializer;
 
 use std::borrow::Cow;
 use std::convert::TryInto;
@@ -36,6 +37,30 @@ pub struct Profile {
     strings: FxIndexSet<String>,
     timestamp_key: StringId,
     upscaling_rules: UpscalingRules,
+}
+
+impl From<Profile> for serializer::Profile {
+    fn from(mut p: Profile) -> Self {
+        Self {
+            functions: p.functions.into_iter().map(|i| i.into()).collect(),
+            labels: p.labels.into_iter().map(|i| i.into()).collect(),
+            label_sets: p.label_sets.into_iter().map(|i| i.into()).collect(),
+            locations: p.locations.into_iter().map(|i| i.into()).collect(),
+            mappings: p.mappings.into_iter().map(|i| i.into()).collect(),
+            observations: p
+                .observations
+                .drain()
+                .map(|(sample, timestamp, values)| serializer::Observation {
+                    sample: Some(sample.into()),
+                    timestamp: timestamp.map_or(0, |ts| ts.into()),
+                    values,
+                })
+                .collect(),
+            sample_types: p.sample_types.into_iter().map(|i| i.into()).collect(),
+            stack_traces: p.stack_traces.into_iter().map(|i| i.into()).collect(),
+            strings: p.strings.into_iter().collect(),
+        }
+    }
 }
 
 #[derive(Default)]
