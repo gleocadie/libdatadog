@@ -87,14 +87,6 @@ impl TrimmedObservation {
     }
 
     /// Safety: the ObservationLength must have come from the same profile as the Observation
-    pub unsafe fn into_vec2(mut self, len: usize) -> Vec<i64> {
-        unsafe {
-            // We built this from a vec.  Put it back together again.
-            Vec::from_raw_parts(mem::replace(&mut self.data, std::ptr::null_mut()), len, len)
-        }
-    }
-
-    /// Safety: the ObservationLength must have come from the same profile as the Observation
     pub unsafe fn into_vec(mut self, len: ObservationLength) -> Vec<i64> {
         unsafe {
             // We built this from a vec.  Put it back together again.
@@ -188,6 +180,18 @@ mod test {
         unsafe {
             assert_eq!(t.as_slice(o), &vec![1, 2]);
             let b = t.into_boxed_slice(o);
+            assert_eq!(*b, vec![1, 2]);
+        }
+    }
+
+    #[test]
+    fn into_vec_test() {
+        let v = vec![1, 2];
+        let o = ObservationLength::new(2);
+        let t = TrimmedObservation::new(v, o);
+        unsafe {
+            assert_eq!(t.as_slice(o), &vec![1, 2]);
+            let b = t.into_vec(o);
             assert_eq!(*b, vec![1, 2]);
         }
     }

@@ -40,7 +40,7 @@ pub struct Profile {
 }
 
 impl From<Profile> for serializer::Profile {
-    fn from(mut p: Profile) -> Self {
+    fn from(p: Profile) -> Self {
         Self {
             functions: p.functions.into_iter().map(|i| i.into()).collect(),
             labels: p.labels.into_iter().map(|i| i.into()).collect(),
@@ -49,7 +49,7 @@ impl From<Profile> for serializer::Profile {
             mappings: p.mappings.into_iter().map(|i| i.into()).collect(),
             observations: p
                 .observations
-                .drain()
+                .into_iter()
                 .map(|(sample, timestamp, values)| serializer::Observation {
                     sample: Some(sample.into()),
                     timestamp: timestamp.map_or(0, |ts| ts.into()),

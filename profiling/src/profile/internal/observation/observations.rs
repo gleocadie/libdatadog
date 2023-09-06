@@ -5,7 +5,7 @@
 
 use super::super::Sample;
 use super::trimmed_observation::{ObservationLength, TrimmedObservation};
-use crate::profile::{Timestamp, TimestampedObservation};
+use crate::profile::Timestamp;
 use std::collections::HashMap;
 
 struct NonEmptyObservations {
@@ -83,18 +83,16 @@ impl Observations {
     }
 
     //TODO TEST THIS WITH MIRI
-    pub fn into_iter(self) -> impl IntoIterator<Item = (Sample, Option<Timestamp>, Vec<i64>)> {
-        unsafe {
-            self.inner.into_iter().flat_map(|mut observations| unsafe {
-                let td = std::mem::take(&mut observations.timestamped_data);
-                let ad = std::mem::take(&mut observations.aggregated_data);
-                let td_it = td.into_iter().map(|(s, t, o)| (s, Some(t), o));
-                let ad_it = ad.into_iter().map(|(s, o)| (s, None, o));
-                td_it
-                    .chain(ad_it)
-                    .map(|(s, t, o)| (s, t, o.into_vec(observations.obs_len)))
-            })
-        }
+    pub fn into_iter(self) -> impl Iterator<Item = (Sample, Option<Timestamp>, Vec<i64>)> {
+        self.inner.into_iter().flat_map(|mut observations| {
+            let td = std::mem::take(&mut observations.timestamped_data);
+            let ad = std::mem::take(&mut observations.aggregated_data);
+            let td_it = td.into_iter().map(|(s, t, o)| (s, Some(t), o));
+            let ad_it = ad.into_iter().map(|(s, o)| (s, None, o));
+            td_it
+                .chain(ad_it)
+                .map(move |(s, t, o)| (s, t, unsafe { o.into_vec(observations.obs_len) }))
+        })
     }
 
     pub fn drain(&mut self) -> Drain {
@@ -162,6 +160,46 @@ mod test {
     use crate::collections::identifiable::*;
     use crate::profile::{LabelSetId, StackTraceId};
     use std::num::NonZeroI64;
+
+    #[test]
+    fn add_and_into_iter_test() {
+        let mut o = Observations::default();
+        // These are only for test purposes. The only thing that matters is that
+        // they differ
+        let s1 = Sample {
+            labels: LabelSetId::from_offset(1),
+            stacktrace: StackTraceId::from_offset(1),
+        };
+        let s2 = Sample {
+            labels: LabelSetId::from_offset(2),
+            stacktrace: StackTraceId::from_offset(2),
+        };
+        let s3 = Sample {
+            labels: LabelSetId::from_offset(3),
+            stacktrace: StackTraceId::from_offset(3),
+        };
+        let t1 = Some(Timestamp::new(1).unwrap());
+
+        o.add(s1, None, vec![1, 2, 3]);
+        o.add(s1, None, vec![4, 5, 6]);
+        o.add(s2, None, vec![7, 8, 9]);
+        o.add(s3, t1, vec![1, 1, 2]);
+
+        o.into_iter().for_each(|(k, ts, v)| {
+            if k == s1 {
+                assert!(ts.is_none());
+                assert_eq!(v, vec![5, 7, 9]);
+            } else if k == s2 {
+                assert!(ts.is_none());
+                assert_eq!(v, vec![7, 8, 9]);
+            } else if k == s3 {
+                assert_eq!(ts, t1);
+                assert_eq!(v, vec![1, 1, 2]);
+            } else {
+                panic!("Unexpected key");
+            }
+        });
+    }
 
     #[test]
     fn add_and_iter_test() {
