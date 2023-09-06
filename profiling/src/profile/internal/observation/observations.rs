@@ -81,10 +81,25 @@ impl Observations {
                 })
         })
     }
+}
 
-    //TODO TEST THIS WITH MIRI
-    pub fn into_iter(self) -> impl Iterator<Item = (Sample, Option<Timestamp>, Vec<i64>)> {
-        self.inner.into_iter().flat_map(|mut observations| {
+pub struct ObservationsIntoIter {
+    it: Box<dyn Iterator<Item = <ObservationsIntoIter as IntoIterator>::Item>>,
+}
+
+impl Iterator for ObservationsIntoIter {
+    type Item = (Sample, Option<Timestamp>, Vec<i64>);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.it.next()
+    }
+}
+
+impl IntoIterator for Observations {
+    type Item = (Sample, Option<Timestamp>, Vec<i64>);
+    type IntoIter = ObservationsIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let it = self.inner.into_iter().flat_map(|mut observations| {
             let td = std::mem::take(&mut observations.timestamped_data);
             let ad = std::mem::take(&mut observations.aggregated_data);
             let td_it = td.into_iter().map(|(s, t, o)| (s, Some(t), o));
@@ -92,49 +107,8 @@ impl Observations {
             td_it
                 .chain(ad_it)
                 .map(move |(s, t, o)| (s, t, unsafe { o.into_vec(observations.obs_len) }))
-        })
-    }
-
-    pub fn drain(&mut self) -> Drain {
-        if let Some(observations) = &mut self.inner {
-            Drain {
-                ad: Some(observations.aggregated_data.drain()),
-                td: Some(observations.timestamped_data.drain(..)),
-                obs_len: Some(observations.obs_len),
-            }
-        } else {
-            Drain {
-                ad: None,
-                td: None,
-                obs_len: None,
-            }
-        }
-    }
-}
-
-pub struct Drain<'a> {
-    ad: Option<std::collections::hash_map::Drain<'a, Sample, TrimmedObservation>>,
-    td: Option<std::vec::Drain<'a, (Sample, std::num::NonZeroI64, TrimmedObservation)>>,
-    obs_len: Option<ObservationLength>,
-}
-
-impl<'a> Iterator for Drain<'a> {
-    type Item = (Sample, Option<Timestamp>, Vec<i64>);
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(ad) = &mut self.ad {
-            let r = ad.next();
-            if r.is_some() {
-                return r.map(|(s, o)| (s, None, unsafe { o.into_vec(self.obs_len.unwrap()) }));
-            }
-        }
-        if let Some(td) = &mut self.td {
-            let r = td.next();
-            if r.is_some() {
-                return r
-                    .map(|(s, t, o)| (s, Some(t), unsafe { o.into_vec(self.obs_len.unwrap()) }));
-            }
-        }
-        None
+        });
+        ObservationsIntoIter { it: Box::new(it) }
     }
 }
 
@@ -162,7 +136,7 @@ mod test {
     use std::num::NonZeroI64;
 
     #[test]
-    fn add_and_into_iter_test() {
+    fn into_iter_test() {
         let mut o = Observations::default();
         // These are only for test purposes. The only thing that matters is that
         // they differ
@@ -185,7 +159,9 @@ mod test {
         o.add(s2, None, vec![7, 8, 9]);
         o.add(s3, t1, vec![1, 1, 2]);
 
+        let mut count = 0;
         o.into_iter().for_each(|(k, ts, v)| {
+            count += 1;
             if k == s1 {
                 assert!(ts.is_none());
                 assert_eq!(v, vec![5, 7, 9]);
@@ -199,6 +175,8 @@ mod test {
                 panic!("Unexpected key");
             }
         });
+        // Two of the samples were aggregated, so three total samples at the end
+        assert_eq!(count, 3);
     }
 
     #[test]
