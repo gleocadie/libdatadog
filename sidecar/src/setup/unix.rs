@@ -9,6 +9,8 @@ use std::{
     },
     path::{Path, PathBuf},
 };
+use std::os::fd::FromRawFd;
+use nix::sys::socket::{SockaddrLike, UnixAddr};
 
 use datadog_ipc::platform::{self, locks::FLock};
 
@@ -16,7 +18,7 @@ use datadog_ipc::platform::{self, locks::FLock};
 /// of library.
 /// Allowing all instances of the same version of the library to establish a shared connection
 pub trait Liaison: Sized {
-    fn connect_to_server(&self) -> io::Result<UnixStream>;
+    fn connect_to_server(&self, blocking: bool) -> io::Result<UnixStream>;
     fn attempt_listen(&self) -> io::Result<Option<UnixListener>>;
     fn ipc_shared() -> Self;
     fn ipc_per_process() -> Self;
@@ -45,7 +47,39 @@ pub struct SharedDirLiaison {
 }
 
 impl Liaison for SharedDirLiaison {
-    fn connect_to_server(&self) -> io::Result<UnixStream> {
+    fn connect_to_server(&self, blocking: bool) -> io::Result<UnixStream> {
+        #[cfg(any(target_os = "linux", target_vendor = "apple"))]
+        if blocking {
+            UnixStream::connect(&self.socket_path)
+        } else {
+            unsafe {
+                #[cfg(target_vendor = "apple")]
+                    let fd = {
+                    let fd = libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0);
+                    if fd >= 0 {
+                        libc::ioctl(fd, libc::FIOCLEX);
+                        let one: libc::c_int = 1;
+                        libc::ioctl(fd, libc::FIONBIO, &one);
+                    }
+                    fd
+                };
+                #[cfg(target_os = "linux")]
+                let fd = libc::socket(libc::AF_UNIX, libc::SOCK_STREAM | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK, 0);
+
+                if fd < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+
+                let addr = UnixAddr::new(&self.socket_path)?;
+
+                if libc::connect(fd, addr.as_ptr() as *const _, addr.len()) < 0 {
+                    libc::close(fd);
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(UnixStream::from_raw_fd(fd))
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_vendor = "apple")))]
         UnixStream::connect(&self.socket_path)
     }
 
@@ -132,8 +166,8 @@ mod linux {
     pub type DefaultLiason = AbstractUnixSocketLiaison;
 
     impl Liaison for AbstractUnixSocketLiaison {
-        fn connect_to_server(&self) -> io::Result<UnixStream> {
-            platform::sockets::connect_abstract(&self.path)
+        fn connect_to_server(&self, blocking: bool) -> io::Result<UnixStream> {
+            platform::sockets::connect_abstract(&self.path, blocking)
         }
 
         fn attempt_listen(&self) -> io::Result<Option<UnixListener>> {
@@ -223,7 +257,7 @@ mod tests {
             }
             listener.set_nonblocking(false).unwrap();
 
-            let mut client = liaison.connect_to_server().unwrap();
+            let mut client = liaison.connect_to_server(true).unwrap();
             let (mut srv, _) = listener.accept().unwrap();
             assert_eq!(1, client.write(&[255]).unwrap());
             let mut buf = [0; 1];

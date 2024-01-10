@@ -298,13 +298,15 @@ pub fn start_or_connect_to_sidecar(cfg: config::Config) -> io::Result<SidecarTra
         config::IpcMode::InstancePerProcess => setup::DefaultLiason::ipc_per_process(),
     };
 
+    let blocking_connect = cfg.blocking_connect;
+
     match liaison.attempt_listen() {
         Ok(Some(listener)) => daemonize(listener, cfg)?,
         Ok(None) => {}
         Err(err) => tracing::error!("Error starting sidecar {}", err),
     }
 
-    Ok(IpcChannel::from(liaison.connect_to_server()?).into())
+    Ok(IpcChannel::from(liaison.connect_to_server(blocking_connect)?).into())
 }
 
 #[cfg(feature = "tracing")]

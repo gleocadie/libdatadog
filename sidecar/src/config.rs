@@ -78,6 +78,7 @@ pub struct Config {
     pub self_telemetry: bool,
     pub library_dependencies: Vec<LibDependency>,
     pub child_env: HashMap<std::ffi::OsString, std::ffi::OsString>,
+    pub blocking_connect: bool,
 }
 
 impl Config {
@@ -163,6 +164,7 @@ impl FromEnv {
             self_telemetry: Self::self_telemetry(),
             library_dependencies: vec![],
             child_env: std::env::vars_os().collect(),
+            blocking_connect: true,
         }
     }
 }

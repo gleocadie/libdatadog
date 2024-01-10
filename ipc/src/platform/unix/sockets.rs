@@ -24,26 +24,26 @@ mod linux {
         bind, connect, listen, socket, AddressFamily, SockFlag, SockType, UnixAddr,
     };
 
-    fn socket_stream() -> io::Result<OwnedFd> {
+    fn socket_stream(flag: SockFlag) -> io::Result<OwnedFd> {
         let fd = socket(
             AddressFamily::Unix,
             SockType::Stream,
-            SockFlag::SOCK_CLOEXEC,
+            flag.union(SockFlag::SOCK_CLOEXEC),
             None,
         )?;
 
         Ok(unsafe { OwnedFd::from_raw_fd(fd) })
     }
 
-    pub fn connect_abstract<P: AsRef<Path>>(path: P) -> io::Result<UnixStream> {
-        let sock = socket_stream()?;
+    pub fn connect_abstract<P: AsRef<Path>>(path: P, block: bool) -> io::Result<UnixStream> {
+        let sock = socket_stream(if block { SockFlag::empty() } else { SockFlag::SOCK_NONBLOCK })?;
         let addr = UnixAddr::new_abstract(path.as_ref().as_os_str().as_bytes())?;
         connect(sock.as_raw_fd(), &addr)?;
         Ok(sock.into())
     }
 
     pub fn bind_abstract<P: AsRef<Path>>(path: P) -> io::Result<UnixListener> {
-        let sock = socket_stream()?;
+        let sock = socket_stream(SockFlag::empty())?;
         let addr = UnixAddr::new_abstract(path.as_ref().as_os_str().as_bytes())?;
         bind(sock.as_raw_fd(), &addr)?;
         listen(sock.as_raw_fd(), 128)?;
