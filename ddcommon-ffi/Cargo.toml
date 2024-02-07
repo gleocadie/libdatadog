@@ -8,7 +8,8 @@ version.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[build-dependencies]
+cbindgen = {version = "0.26", optional = true}
 
 [dependencies]
 ddcommon = { path = "../ddcommon" }
