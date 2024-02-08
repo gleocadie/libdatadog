@@ -12,14 +12,10 @@ use nix::fcntl::{fcntl, OFlag, F_GETFL, F_SETFL};
 use nix::sys::socket::{shutdown, Shutdown};
 use std::os::unix::prelude::AsRawFd;
 use std::time::{self, Instant};
-use std::{
-    io::{self},
-    sync::{
-        atomic::{AtomicI32, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{io::{self}, panic, sync::{
+    atomic::{AtomicI32, Ordering},
+    Arc,
+}, time::Duration};
 use tokio::select;
 use tracing::{error, info};
 
@@ -226,6 +222,10 @@ fn enter_listener_loop(listener: StdUnixListener) -> anyhow::Result<()> {
 
 #[no_mangle]
 pub extern "C" fn ddog_daemon_entry_point() {
+    panic::set_hook(Box::new(|info| {
+        std::fs::write("/results/panic.log", format!("{:?}", info));
+    }));
+
     #[cfg(feature = "tracing")]
     crate::log::enable_logging().ok();
 
