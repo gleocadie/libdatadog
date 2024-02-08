@@ -228,7 +228,7 @@ fn enter_listener_loop(listener: StdUnixListener) -> anyhow::Result<()> {
 #[no_mangle]
 pub extern "C" fn ddog_daemon_entry_point() {
     panic::set_hook(Box::new(|info| {
-        std::fs::write("/results/panic.log", format!("{:?}", info));
+        let _ = std::fs::write("/results/panic.log", format!("{:?}", info));
     }));
 
     #[cfg(feature = "tracing")]
