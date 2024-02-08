@@ -12,10 +12,15 @@ use nix::fcntl::{fcntl, OFlag, F_GETFL, F_SETFL};
 use nix::sys::socket::{shutdown, Shutdown};
 use std::os::unix::prelude::AsRawFd;
 use std::time::{self, Instant};
-use std::{io::{self}, panic, sync::{
-    atomic::{AtomicI32, Ordering},
-    Arc,
-}, time::Duration};
+use std::{
+    io::{self},
+    panic,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::select;
 use tracing::{error, info};
 
