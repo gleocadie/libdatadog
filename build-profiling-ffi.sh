@@ -164,14 +164,8 @@ cd -
 echo "Building tools"
 cargo build --package tools --bins
 
-# echo "Generating $destdir/include/libdatadog headers..."
-# cbindgen --crate ddcommon-ffi \
-#     --config ddcommon-ffi/cbindgen.toml \
-#     --output "$destdir/include/datadog/common.h"
-# cbindgen --crate "${datadog_profiling_ffi}" \
-#     --config profiling-ffi/cbindgen.toml \
-#     --output "$destdir/include/datadog/profiling.h"
-# "$CARGO_TARGET_DIR"/debug/dedup_headers "$destdir/include/datadog/common.h" "$destdir/include/datadog/profiling.h"
+echo "Generating $destdir/include/libdatadog headers..."
+"$CARGO_TARGET_DIR"/debug/dedup_headers "$destdir/include/datadog/common.h" "$destdir/include/datadog/profiling.h"
 
 # Don't build the crashtracker on windows
 if [[ "$target" != "x86_64-pc-windows-msvc" ]]; then
