@@ -11,15 +11,15 @@ license.workspace = true
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
 
+[build-dependencies]
+build_common = { path = "../build_common" }
+
 [dependencies]
 ddtelemetry = { path = "../ddtelemetry" }
 ddcommon = { path = "../ddcommon" }
 ddcommon-ffi = { path = "../ddcommon-ffi" }
 paste = "1"
 libc = "0.2"
-
-[build-dependencies]
-cbindgen = {version = "0.26"}
 
 [dev-dependencies]
 tempfile = {version = "3.3"}

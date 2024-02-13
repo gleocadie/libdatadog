@@ -1,6 +1,6 @@
 use cbindgen::{self, Config};
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Generates a C header file using `cbindgen` for the specified crate.
 ///
@@ -18,7 +18,7 @@ pub fn generate_header(crate_dir: PathBuf, header_name: &str, output_base_dir: O
         // If absolute, use it directly
         cargo_target_path.join("include/datadog/").join(header_name)
     } else {
-        // If relative, adjust the path accordingly
+        // If relative, adjust the path accordingly. we are in a crate, so get back to top level
         let adjusted_path = if cargo_target_path.ends_with("target") {
             Path::new("..").join(cargo_target_path)
         } else {

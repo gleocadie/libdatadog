@@ -14,7 +14,7 @@ license.workspace = true
 crate-type = ["staticlib", "cdylib"]
 
 [build-dependencies]
-cbindgen = {version = "0.26"}
+build_common = { path = "../build_common" }
 
 [dependencies]
 anyhow = "1.0"

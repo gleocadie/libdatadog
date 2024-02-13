@@ -701,7 +701,7 @@ name = "datadog-profiling-ffi"
 version = "5.0.0"
 dependencies = [
  "anyhow",
- "cbindgen",
+ "build_common",
  "chrono",
  "datadog-crashtracker",
  "datadog-profiling",
@@ -948,7 +948,7 @@ dependencies = [
 name = "ddtelemetry-ffi"
 version = "5.0.0"
 dependencies = [
- "cbindgen",
+ "build_common",
  "ddcommon",
  "ddcommon-ffi",
  "ddtelemetry",
