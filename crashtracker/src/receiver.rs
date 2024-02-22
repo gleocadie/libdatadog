@@ -25,7 +25,7 @@ pub fn receiver_entry_point() -> anyhow::Result<()> {
 
     let telemetry_uploader = telemetry::TelemetryCrashUploader::new(&metadata, &config).ok();
 
-    match receive_report(std::io::stdin().lock(), &metadata)? {
+    match dbg!(receive_report(std::io::stdin().lock(), &metadata))? {
         CrashReportStatus::NoCrash => Ok(()),
         CrashReportStatus::CrashReport(crash_info) => {
             if config.resolve_frames == CrashtrackerResolveFrames::ExperimentalInReceiver {
@@ -34,7 +34,9 @@ pub fn receiver_entry_point() -> anyhow::Result<()> {
             if let Some(endpoint) = config.endpoint {
                 // Don't keep the endpoint waiting forever.
                 // TODO Experiment to see if 30 is the right number.
+                eprintln!("crash_info.upload_to_endpoint");
                 crash_info.upload_to_endpoint(endpoint, Duration::from_secs(30))?;
+                eprintln!("crash_info.upload_to_endpoint done");
             }
             if let Some(uploader) = telemetry_uploader {
                 uploader.upload_to_telemetry(&crash_info, Duration::from_secs(30))?;
@@ -136,6 +138,7 @@ fn process_line(
     Ok(next)
 }
 
+#[derive(Debug)]
 enum CrashReportStatus {
     NoCrash,
     CrashReport(CrashInfo),
@@ -158,8 +161,14 @@ fn receive_report(
     //TODO: This assumes that the input is valid UTF-8.
     for line in stream.lines() {
         let line = line?;
+        dbg!(&line);
+        dbg!(&crashinfo);
+        dbg!(&stdin_state);
         stdin_state = process_line(&mut crashinfo, line, stdin_state)?;
     }
+
+    dbg!(&crashinfo);
+    dbg!(&stdin_state);
 
     if !crashinfo.crash_seen() {
         return Ok(CrashReportStatus::NoCrash);

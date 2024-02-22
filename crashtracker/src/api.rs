@@ -155,7 +155,9 @@ pub fn init(
     // Setup the receiver first, so that if there is a crash detected it has
     // somewhere to go.
     setup_receiver(&config, &metadata)?;
+    eprintln!("Setup receiver");
     register_crash_handlers(&config)?;
+    eprintln!("registered crash handler");
     Ok(())
 }
 

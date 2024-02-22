@@ -27,13 +27,13 @@ fn test_crash_tracking_bin(crash_tracking_receiver_profile: BuildProfile) {
         name: "crashtracker_bin_test".to_owned(),
         build_profile: crash_tracking_receiver_profile,
         artifact_type: ArtifactType::Bin,
-        triple_target: None,
+        triple_target: Some(String::from("x86_64-unknown-linux-gnu")),
     };
     let crashtracker_receiver = ArtifactsBuild {
         name: "crashtracker_receiver".to_owned(),
         build_profile: crash_tracking_receiver_profile,
         artifact_type: ArtifactType::Bin,
-        triple_target: None,
+        triple_target: Some(String::from("x86_64-unknown-linux-gnu")),
     };
     let artifacts = build_artifacts(&[&crashtracker_receiver, &crashtracker_bin]).unwrap();
 
@@ -63,6 +63,7 @@ fn test_crash_tracking_bin(crash_tracking_receiver_profile: BuildProfile) {
     let stdout = fs::read(stdout_path)
         .context("reading crashtracker stdout")
         .unwrap();
+    println!("{}", String::from_utf8_lossy(&stderr));
     assert_eq!(Ok(""), String::from_utf8(stderr).as_deref());
     assert_eq!(Ok(""), String::from_utf8(stdout).as_deref());
 
