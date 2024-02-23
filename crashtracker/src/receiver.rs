@@ -15,13 +15,18 @@ use std::{io::BufRead, time::Duration};
 /// See comments in [profiling/crashtracker/mod.rs] for a full architecture
 /// description.
 pub fn receiver_entry_point() -> anyhow::Result<()> {
+    eprintln!("receiver started");
     let mut config = String::new();
     std::io::stdin().lock().read_line(&mut config)?;
     let config: CrashtrackerConfiguration = serde_json::from_str(&config)?;
 
+    eprintln!("receiver received config {:?}", config);
+
     let mut metadata = String::new();
     std::io::stdin().lock().read_line(&mut metadata)?;
     let metadata: CrashtrackerMetadata = serde_json::from_str(&metadata)?;
+
+    eprintln!("receiver received metadata {:?}", metadata);
 
     let telemetry_uploader = telemetry::TelemetryCrashUploader::new(&metadata, &config).ok();
 

@@ -63,7 +63,7 @@ fn test_crash_tracking_bin(crash_tracking_receiver_profile: BuildProfile) {
     let stdout = fs::read(stdout_path)
         .context("reading crashtracker stdout")
         .unwrap();
-    println!("{}", String::from_utf8_lossy(&stderr));
+    eprintln!("{}", String::from_utf8_lossy(&stderr));
     assert_eq!(Ok(""), String::from_utf8(stderr).as_deref());
     assert_eq!(Ok(""), String::from_utf8(stdout).as_deref());
 
