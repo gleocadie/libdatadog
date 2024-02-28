@@ -171,9 +171,11 @@ fn handle_posix_signal_impl(signum: i32) -> anyhow::Result<()> {
     eprintln!("handle_posix_signal_impl after writing signum to pipe");
 
     emit_counters(pipe)?;
+    eprintln!("handle_posix_signal_impl after emitting counters to pipe");
 
     #[cfg(target_os = "linux")]
     emit_proc_self_maps(pipe)?;
+    eprintln!("handle_posix_signal_impl after emitting memory maps");
 
     // Getting a backtrace on rust is not guaranteed to be signal safe
     // https://github.com/rust-lang/backtrace-rs/issues/414
@@ -183,14 +185,16 @@ fn handle_posix_signal_impl(signum: i32) -> anyhow::Result<()> {
     // Do this last, so even if it crashes, we still get the other info.
     unsafe { emit_backtrace_by_frames(pipe, RESOLVE_FRAMES)? };
     writeln!(pipe, "{DD_CRASHTRACK_DONE}")?;
+    eprintln!("handle_posix_signal_impl after emitting backtrace");
 
     pipe.flush()?;
+    eprintln!("handle_posix_signal_impl after flushing pipe");
     // https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
     // The stdin handle to the child process, if any, will be closed before waiting.
     // This helps avoid deadlock: it ensures that the child does not block waiting
     // for input from the parent, while the parent waits for the child to exit.
     //TODO, use a polling mechanism that could recover from a crashing child
-    eprintln!("{}", receiver.wait()?);
+    eprintln!("receiver exited status: {}", receiver.wait()?);
     Ok(())
 }
 
