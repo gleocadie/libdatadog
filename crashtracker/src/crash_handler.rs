@@ -58,7 +58,7 @@ fn make_receiver(
         Stdio::null()
     };
 
-    let receiver = dbg!(Command::new(&config.path_to_receiver_binary)
+    let mut receiver = dbg!(Command::new(&config.path_to_receiver_binary)
         .arg("receiver")
         .stdin(Stdio::piped())
         .stderr(stderr)
@@ -76,6 +76,8 @@ fn make_receiver(
         "{}",
         serde_json::to_string(&config)?
     )?;
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    dbg!(receiver.try_wait());
     writeln!(
         receiver.stdin.as_ref().unwrap(),
         "{}",
