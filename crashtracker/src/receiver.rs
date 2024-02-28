@@ -15,41 +15,44 @@ use std::{io::BufRead, time::Duration};
 /// See comments in [profiling/crashtracker/mod.rs] for a full architecture
 /// description.
 pub fn receiver_entry_point() -> anyhow::Result<()> {
-    eprintln!("receiver started");
-    let mut config = String::new();
-    std::io::stdin().lock().read_line(&mut config)?;
-    let config: CrashtrackerConfiguration = serde_json::from_str(&config)?;
+    dbg!({
+        eprintln!("receiver started");
+        let mut config = String::new();
+        std::io::stdin().lock().read_line(&mut config)?;
+        dbg!(&config);
+        let config: CrashtrackerConfiguration = serde_json::from_str(&config)?;
 
-    eprintln!("receiver received config {:?}", config);
+        eprintln!("receiver received config {:?}", config);
 
-    let mut metadata = String::new();
-    std::io::stdin().lock().read_line(&mut metadata)?;
-    let metadata: CrashtrackerMetadata = serde_json::from_str(&metadata)?;
+        let mut metadata = String::new();
+        std::io::stdin().lock().read_line(&mut metadata)?;
+        let metadata: CrashtrackerMetadata = serde_json::from_str(&metadata)?;
 
-    eprintln!("receiver received metadata {:?}", metadata);
+        eprintln!("receiver received metadata {:?}", metadata);
 
-    let telemetry_uploader = telemetry::TelemetryCrashUploader::new(&metadata, &config).ok();
+        let telemetry_uploader = telemetry::TelemetryCrashUploader::new(&metadata, &config).ok();
 
-    match dbg!(receive_report(std::io::stdin().lock(), &metadata))? {
-        CrashReportStatus::NoCrash => Ok(()),
-        CrashReportStatus::CrashReport(crash_info) => {
-            if config.resolve_frames == CrashtrackerResolveFrames::ExperimentalInReceiver {
-                todo!("Processing names in the receiver is WIP");
+        match dbg!(receive_report(std::io::stdin().lock(), &metadata))? {
+            CrashReportStatus::NoCrash => Ok(()),
+            CrashReportStatus::CrashReport(crash_info) => {
+                if config.resolve_frames == CrashtrackerResolveFrames::ExperimentalInReceiver {
+                    todo!("Processing names in the receiver is WIP");
+                }
+                if let Some(endpoint) = config.endpoint {
+                    // Don't keep the endpoint waiting forever.
+                    // TODO Experiment to see if 30 is the right number.
+                    eprintln!("crash_info.upload_to_endpoint");
+                    crash_info.upload_to_endpoint(endpoint, Duration::from_secs(30))?;
+                    eprintln!("crash_info.upload_to_endpoint done");
+                }
+                if let Some(uploader) = telemetry_uploader {
+                    uploader.upload_to_telemetry(&crash_info, Duration::from_secs(30))?;
+                }
+                Ok(())
             }
-            if let Some(endpoint) = config.endpoint {
-                // Don't keep the endpoint waiting forever.
-                // TODO Experiment to see if 30 is the right number.
-                eprintln!("crash_info.upload_to_endpoint");
-                crash_info.upload_to_endpoint(endpoint, Duration::from_secs(30))?;
-                eprintln!("crash_info.upload_to_endpoint done");
-            }
-            if let Some(uploader) = telemetry_uploader {
-                uploader.upload_to_telemetry(&crash_info, Duration::from_secs(30))?;
-            }
-            Ok(())
+            CrashReportStatus::PartialCrashReport(_, _) => todo!(),
         }
-        CrashReportStatus::PartialCrashReport(_, _) => todo!(),
-    }
+    })
 }
 
 /// The crashtracker collector sends data in blocks.
