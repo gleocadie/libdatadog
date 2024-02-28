@@ -58,7 +58,7 @@ fn make_receiver(
         Stdio::null()
     };
 
-    let mut receiver = dbg!(Command::new(&config.path_to_receiver_binary)
+    let receiver = dbg!(Command::new(&config.path_to_receiver_binary)
         .arg("receiver")
         .stdin(Stdio::piped())
         .stderr(stderr)
@@ -76,8 +76,6 @@ fn make_receiver(
         "{}",
         serde_json::to_string(&config)?
     )?;
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    dbg!(receiver.try_wait());
     writeln!(
         receiver.stdin.as_ref().unwrap(),
         "{}",
@@ -143,8 +141,8 @@ extern "C" fn handle_posix_signal(signum: i32) {
     // behaviour.  Do this first to prevent recursive activation if this handler
     // itself crashes (e.g. while calculating stacktrace)
     let _ = restore_old_handlers();
-    let _ = handle_posix_signal_impl(signum);
-
+    let res = handle_posix_signal_impl(signum);
+    eprintln!("from handle_posix_signal {:?}", res);
     // return to old handler (chain).  See comments on `restore_old_handler`.
 }
 
