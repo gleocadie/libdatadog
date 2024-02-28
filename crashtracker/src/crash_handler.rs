@@ -186,7 +186,7 @@ fn handle_posix_signal_impl(signum: i32) -> anyhow::Result<()> {
     // This helps avoid deadlock: it ensures that the child does not block waiting
     // for input from the parent, while the parent waits for the child to exit.
     //TODO, use a polling mechanism that could recover from a crashing child
-    receiver.wait()?;
+    dbg!(receiver.wait()?);
     Ok(())
 }
 
