@@ -28,6 +28,7 @@ pub unsafe fn emit_backtrace_by_frames(
     // https://docs.rs/backtrace/latest/backtrace/index.html
     writeln!(w, "{DD_CRASHTRACK_BEGIN_STACKTRACE}")?;
     backtrace::trace_unsynchronized(|frame| {
+        eprintln!("unwinding frame ip:{}", frame.ip() as usize);
         // Write the values we can get without resolving, since these seem to
         // be crash safe in my experiments.
         write! {w, "{{"}.unwrap();
