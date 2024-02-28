@@ -137,6 +137,7 @@ pub fn shutdown_receiver() -> anyhow::Result<()> {
 }
 
 extern "C" fn handle_posix_signal(signum: i32) {
+    eprintln!("signal handler invoked signum:{signum}");
     // Safety: We've already crashed, this is a best effort to chain to the old
     // behaviour.  Do this first to prevent recursive activation if this handler
     // itself crashes (e.g. while calculating stacktrace)
@@ -186,7 +187,7 @@ fn handle_posix_signal_impl(signum: i32) -> anyhow::Result<()> {
     // This helps avoid deadlock: it ensures that the child does not block waiting
     // for input from the parent, while the parent waits for the child to exit.
     //TODO, use a polling mechanism that could recover from a crashing child
-    dbg!(receiver.wait()?);
+    eprintln!("{}", receiver.wait()?);
     Ok(())
 }
 
