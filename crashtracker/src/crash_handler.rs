@@ -55,7 +55,7 @@ fn make_receiver(
         Stdio::null()
     };
 
-    let receiver = Command::new(&config.path_to_receiver_binary)
+    let receiver = dbg!(Command::new(&config.path_to_receiver_binary)
         .arg("receiver")
         .stdin(Stdio::piped())
         .stderr(stderr)
@@ -64,7 +64,7 @@ fn make_receiver(
         .context(format!(
             "Unable to start process: {}",
             &config.path_to_receiver_binary
-        ))?;
+        )))?;
 
     // Write the args into the receiver.
     // Use the pipe to avoid secrets ending up on the commandline
@@ -86,6 +86,7 @@ pub fn setup_receiver(
     metadata: &CrashtrackerMetadata,
 ) -> anyhow::Result<()> {
     let new_receiver = make_receiver(config, metadata)?;
+    eprintln!("started new receiver with pid {}", new_receiver.id());
     let old_receiver =
         unsafe { std::mem::replace(&mut RECEIVER, GlobalVarState::Some(new_receiver)) };
     anyhow::ensure!(

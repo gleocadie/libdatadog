@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 int main(void) {
+  fprintf(stderr, "started receiver cpp binary");
   ddog_prof_Profile_Result new_result = ddog_prof_crashtracker_receiver_entry_point();
   if (new_result.tag != DDOG_PROF_PROFILE_NEW_RESULT_OK) {
     ddog_CharSlice message = ddog_Error_message(&new_result.err);
