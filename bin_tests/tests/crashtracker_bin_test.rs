@@ -3,6 +3,7 @@
 
 #![cfg(unix)]
 
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process;
 use std::{fs, path::PathBuf};
@@ -55,7 +56,7 @@ fn test_crash_tracking_bin(crash_tracking_receiver_profile: BuildProfile) {
         eprintln!("Waiting for exit");
         p.wait().unwrap()
     });
-    assert!(!exit_status.success());
+    assert_eq!(exit_status.signal(), Some(11));
 
     let stderr = fs::read(stderr_path)
         .context("reading crashtracker stderr")

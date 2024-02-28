@@ -142,6 +142,7 @@ extern "C" fn handle_posix_signal(signum: i32) {
     // behaviour.  Do this first to prevent recursive activation if this handler
     // itself crashes (e.g. while calculating stacktrace)
     let _ = restore_old_handlers();
+    eprintln!("previous handler restored");
     let res = handle_posix_signal_impl(signum);
     eprintln!("from handle_posix_signal {:?}", res);
     // return to old handler (chain).  See comments on `restore_old_handler`.
@@ -162,10 +163,12 @@ fn handle_posix_signal_impl(signum: i32) -> anyhow::Result<()> {
         "UNKNOWN"
     };
 
+    eprintln!("handle_posix_signal_impl before writing to pipe");
     let pipe = receiver.stdin.as_mut().unwrap();
     writeln!(pipe, "{DD_CRASHTRACK_BEGIN_SIGINFO}")?;
     writeln!(pipe, "{{\"signum\": {signum}, \"signame\": \"{signame}\"}}")?;
     writeln!(pipe, "{DD_CRASHTRACK_END_SIGINFO}")?;
+    eprintln!("handle_posix_signal_impl after writing signum to pipe");
 
     emit_counters(pipe)?;
 
