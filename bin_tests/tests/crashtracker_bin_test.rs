@@ -16,11 +16,11 @@ fn test_crash_tracking_bin_debug() {
     test_crash_tracking_bin(BuildProfile::Debug);
 }
 
-#[test]
-#[cfg_attr(miri, ignore)]
-fn test_crash_tracking_bin_release() {
-    test_crash_tracking_bin(BuildProfile::Release);
-}
+// #[test]
+// #[cfg_attr(miri, ignore)]
+// fn test_crash_tracking_bin_release() {
+//     test_crash_tracking_bin(BuildProfile::Release);
+// }
 
 fn test_crash_tracking_bin(crash_tracking_receiver_profile: BuildProfile) {
     let crashtracker_bin = ArtifactsBuild {

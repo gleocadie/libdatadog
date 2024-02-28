@@ -44,10 +44,13 @@ fn make_receiver(
 ) -> anyhow::Result<std::process::Child> {
     // TODO: currently create the file in write mode.  Would append make more sense?
     let stderr = if let Some(filename) = &config.stderr_filename {
-        File::create(filename)?.into()
+        let f = File::create(filename)?;
+        write!(&f, "hello from stderr").unwrap();
+        f.into()
     } else {
         Stdio::null()
     };
+    dbg!(&stderr);
 
     let stdout = if let Some(filename) = &config.stdout_filename {
         File::create(filename)?.into()
