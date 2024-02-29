@@ -56,6 +56,7 @@ fn test_crash_tracking_bin(crash_tracking_receiver_profile: BuildProfile) {
         p.wait().unwrap()
     });
     assert!(!exit_status.success());
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     let stderr = fs::read(stderr_path)
         .context("reading crashtracker stderr")
