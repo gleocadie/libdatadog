@@ -9,6 +9,7 @@ use hyper::{Body, Client, Method};
 use log::error;
 use std::{borrow::Borrow, collections::HashMap, str::FromStr};
 use tokio::runtime::Runtime;
+use pyo3::prelude::*;
 
 struct TracerTags {
     tracer_version: String,
@@ -153,6 +154,7 @@ impl TraceExporter {
     }
 }
 
+#[pyclass]
 #[derive(Default)]
 pub struct TraceExporterBuilder {
     host: Option<String>,
@@ -232,6 +234,12 @@ impl TraceExporterBuilder {
             runtime,
         })
     }
+}
+
+#[pymodule]
+fn trace_exporter(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    m.add_class::<TraceExporterBuilder>()?;
+    Ok(())
 }
 
 #[cfg(test)]
