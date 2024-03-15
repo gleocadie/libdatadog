@@ -7,7 +7,7 @@ use datadog_trace_utils::trace_utils::{self, SendData, TracerHeaderTags};
 use ddcommon::{connector, Endpoint};
 use hyper::{Body, Client, Method};
 use log::error;
-use std::{collections::HashMap, ops::Deref, str::FromStr};
+use std::{collections::HashMap, ops::Deref, str::FromStr, time::Duration};
 use tokio::runtime::Runtime;
 
 struct TracerTags {
@@ -29,8 +29,8 @@ impl<'a> From<&'a TracerTags> for TracerHeaderTags<'a> {
     }
 }
 
-impl From<TracerTags> for HashMap<&'static str, String> {
-    fn from(tags: TracerTags) -> HashMap<&'static str, String> {
+impl<'a> From<&'a TracerTags> for HashMap<&'static str, String> {
+    fn from(tags: &'a TracerTags) -> HashMap<&'static str, String> {
         TracerHeaderTags::<'_> {
             lang: &tags.language,
             lang_version: &tags.language_version,
@@ -47,6 +47,7 @@ pub struct TraceExporter {
     tags: TracerTags,
     no_proxy: bool,
     runtime: Runtime,
+    timeout: u64
 }
 
 impl TraceExporter {
@@ -54,7 +55,7 @@ impl TraceExporter {
         TraceExporterBuilder::default()
     }
 
-    pub fn send(self, data: Bytes, trace_count: usize) -> Result<String, String> {
+    pub fn send(&self, data: Bytes, trace_count: usize) -> Result<String, String> {
         if self.no_proxy {
             self.send_deser_ser(data)
         } else {
@@ -62,7 +63,7 @@ impl TraceExporter {
         }
     }
 
-    fn send_proxy(self, data: Bytes, trace_count: usize) -> Result<String, String> {
+    fn send_proxy(&self, data: Bytes, trace_count: usize) -> Result<String, String> {
         let uri = self.endpoint.url.clone();
         self.runtime
             .block_on(async {
@@ -74,7 +75,7 @@ impl TraceExporter {
                     )
                     .method(Method::POST);
 
-                let headers: HashMap<&'static str, String> = self.tags.into();
+                let headers: HashMap<&'static str, String> = (&self.tags).into();
 
                 for (key, value) in &headers {
                     req_builder = req_builder.header(*key, value);
@@ -84,26 +85,34 @@ impl TraceExporter {
                     .header("X-Datadog-Trace-Count", trace_count.to_string().as_str());
                 let req = req_builder.body(Body::from(data)).unwrap();
 
-                match Client::builder()
+                match tokio::time::timeout(
+                    Duration::from_millis(self.timeout),
+                    Client::builder()
                     .build(connector::Connector::default())
-                    .request(req)
+                    .request(req))
                     .await
                 {
-                    Ok(response) => {
-                        if response.status() != 200 {
-                            let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
-                            let response_body =
-                                String::from_utf8(body_bytes.to_vec()).unwrap_or_default();
-                            anyhow::bail!("Agent did not accept traces: {response_body}");
-                        }
-                        match hyper::body::to_bytes(response.into_body()).await {
-                            Ok(body) => Ok(String::from_utf8_lossy(&body).to_string()),
-                            Err(err) => {
-                                anyhow::bail!("Error reading agent response body: {err}");
+                    Ok(result) => match result {
+                        Ok(response) => {
+                            if response.status() != 200 {
+                                let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
+                                let response_body =
+                                    String::from_utf8(body_bytes.to_vec()).unwrap_or_default();
+                                anyhow::bail!("Agent did not accept traces: {response_body}");
+                            }
+                            match hyper::body::to_bytes(response.into_body()).await {
+                                Ok(body) => Ok(String::from_utf8_lossy(&body).to_string()),
+                                Err(err) => {
+                                    anyhow::bail!("Error reading agent response body: {err}");
+                                }
                             }
                         }
+                        Err(err) => anyhow::bail!("Failed to send traces: {err}"),
+                    },
+                    Err(_) => {
+                        println!("Timeout reached");
+                        Ok(String::from("{}"))
                     }
-                    Err(err) => anyhow::bail!("Failed to send traces: {err}"),
                 }
             })
             .or_else(|err| {
@@ -112,7 +121,7 @@ impl TraceExporter {
             })
     }
 
-    fn send_deser_ser(self, data: Bytes) -> Result<String, String> {
+    fn send_deser_ser(&self, data: Bytes) -> Result<String, String> {
         let size = data.len();
         let traces: Vec<Vec<pb::Span>> = match rmp_serde::from_slice(data.deref()) {
             Ok(res) => res,
@@ -134,16 +143,22 @@ impl TraceExporter {
 
         let send_data = SendData::new(size, tracer_payload, header_tags, &self.endpoint);
         self.runtime.block_on(async {
-            match send_data.send().await {
-                Ok(response) => match hyper::body::to_bytes(response.into_body()).await {
-                    Ok(body) => Ok(String::from_utf8_lossy(&body).to_string()),
+            match tokio::time::timeout(Duration::from_millis(self.timeout), send_data.send()).await {
+                Ok(result) => match result {
+                    Ok(response) => match hyper::body::to_bytes(response.into_body()).await {
+                        Ok(body) => Ok(String::from_utf8_lossy(&body).to_string()),
+                        Err(err) => {
+                            error!("Error reading agent response body: {err}");
+                            Ok(String::from("{}"))
+                        }
+                    },
                     Err(err) => {
-                        error!("Error reading agent response body: {err}");
+                        error!("Error sending traces: {err}");
                         Ok(String::from("{}"))
                     }
                 },
-                Err(err) => {
-                    error!("Error sending traces: {err}");
+                Err(_) => {
+                    error!("Timeout reached");
                     Ok(String::from("{}"))
                 }
             }
@@ -160,6 +175,7 @@ pub struct TraceExporterBuilder {
     language_version: Option<String>,
     interpreter: Option<String>,
     no_proxy: bool,
+    timeout: Option<u64>,
 }
 
 impl TraceExporterBuilder {
@@ -201,6 +217,11 @@ impl TraceExporterBuilder {
         self
     }
 
+    pub fn set_timeout(&mut self, timeout: u64) -> &mut TraceExporterBuilder {
+        self.timeout = Some(timeout);
+        self
+    }
+
     pub fn build(&mut self) -> anyhow::Result<TraceExporter> {
         let version = if self.no_proxy { "v0.7" } else { "v0.4" };
         let endpoint = Endpoint {
@@ -228,6 +249,7 @@ impl TraceExporterBuilder {
             },
             no_proxy: self.no_proxy,
             runtime,
+            timeout: self.timeout.unwrap_or(500),
         })
     }
 }
@@ -247,6 +269,7 @@ mod tests {
             .set_language("nodejs")
             .set_language_version("1.0")
             .set_language_interpreter("v8")
+            .set_timeout(200)
             .build()
             .unwrap();
 
@@ -254,12 +277,13 @@ mod tests {
             exporter.endpoint.url.to_string(),
             "http://192.168.1.1:8127/v0.7/traces"
         );
-        assert_eq!(builder.host.unwrap(), "192.168.1.1");
-        assert_eq!(builder.port.unwrap(), 8127);
-        assert_eq!(builder.tracer_version.unwrap(), "v0.1");
-        assert_eq!(builder.language.unwrap(), "nodejs");
-        assert_eq!(builder.language_version.unwrap(), "1.0");
-        assert_eq!(builder.interpreter.unwrap(), "v8");
+
+        assert_eq!(exporter.endpoint.url.port_u16().unwrap(), 8127);
+        assert_eq!(exporter.endpoint.url.host().unwrap(), "192.168.1.1");
+        assert_eq!(exporter.tags.tracer_version, "v0.1");
+        assert_eq!(exporter.tags.language, "nodejs");
+        assert_eq!(exporter.tags.language_version, "1.0");
+        assert_eq!(exporter.tags.language_interpreter, "v8");
     }
 
     #[test]
@@ -277,10 +301,10 @@ mod tests {
             exporter.endpoint.url.to_string(),
             "http://127.0.0.1:8126/v0.4/traces"
         );
-        assert_eq!(builder.tracer_version.unwrap(), "v0.1");
-        assert_eq!(builder.language.unwrap(), "nodejs");
-        assert_eq!(builder.language_version.unwrap(), "1.0");
-        assert_eq!(builder.interpreter.unwrap(), "v8");
+        assert_eq!(exporter.tags.tracer_version, "v0.1");
+        assert_eq!(exporter.tags.language, "nodejs");
+        assert_eq!(exporter.tags.language_version, "1.0");
+        assert_eq!(exporter.tags.language_interpreter, "v8");
     }
 
     #[test]
