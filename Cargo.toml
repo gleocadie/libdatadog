@@ -50,6 +50,8 @@ codegen-units = 1
 debug = 1 # line tables only
 lto = true
 opt-level = "s" # optimize for size
+panic = "abort"
+strip = true
 
 [profile.release.package.datadog-serverless-trace-mini-agent]
 strip = true

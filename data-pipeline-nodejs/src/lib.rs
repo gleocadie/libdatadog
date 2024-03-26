@@ -58,11 +58,12 @@ fn init(mut cx: FunctionContext) -> JsResult<JsUndefined>{
 }
 
 fn send(mut cx: FunctionContext) -> JsResult<JsString> {
+    let trace_count = cx.argument::<JsNumber>(1)?.value(cx.borrow_mut());
     let data = cx.argument::<JsBuffer>(0)?.as_slice(cx.borrow_mut());
-    let data = cx.argument::<JsNumber>(1)?.value(cx.borrow_mut());
-    EXPORTER.lock().unwrap().get().unwrap().send(Bytes::fdata, trace_count);
 
-    Ok(cx.string(String::from("")))
+    let response = EXPORTER.lock().unwrap().get().unwrap().send(data, trace_count as usize);
+
+    Ok(cx.string(response.unwrap_or("Error sending traces".to_string())))
 }
 
 #[neon::main]

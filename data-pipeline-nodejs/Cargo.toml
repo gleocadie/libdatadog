@@ -15,3 +15,10 @@ crate-type = ["cdylib"]
 [dependencies]
 neon = "1"
 data-pipeline = { path = "../data-pipeline" }
+
+[profile.release]
+strip = true
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
