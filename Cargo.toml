@@ -3,6 +3,7 @@
 
 [workspace]
 members = [
+  "collector",
   "crashtracker",
   "profiling",
   "profiling-ffi",
