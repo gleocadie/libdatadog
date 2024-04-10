@@ -742,6 +742,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "datadog-alloc"
+version = "8.0.0"
+dependencies = [
+ "allocator-api2",
+]
+
+[[package]]
 name = "datadog-crashtracker"
 version = "8.0.0"
 dependencies = [
