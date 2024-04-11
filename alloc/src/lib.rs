@@ -4,5 +4,7 @@
 #![no_std]
 
 mod linear;
+mod r#virtual;
 
 pub use linear::*;
+pub use r#virtual::*;

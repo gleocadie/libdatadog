@@ -11,6 +11,16 @@ license.workspace = true
 [dependencies]
 allocator-api2 = { version = "0.2", default-features = false }
 
+[target.'cfg(unix)'.dependencies.libc]
+version = "0.2.153"
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.52"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+]
 
 [dev-dependencies]
 allocator-api2 = { version = "0.2", default-features = false, features = ["alloc"] }
