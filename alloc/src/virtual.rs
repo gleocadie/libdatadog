@@ -4,7 +4,7 @@
 use allocator_api2::alloc::AllocError;
 use core::alloc::Layout;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct VirtualAllocator {}
 
 #[cfg_attr(debug_assertions, track_caller)]

@@ -3,8 +3,10 @@
 
 #![no_std]
 
+mod chain;
 mod linear;
 mod r#virtual;
 
+pub use chain::*;
 pub use linear::*;
 pub use r#virtual::*;
