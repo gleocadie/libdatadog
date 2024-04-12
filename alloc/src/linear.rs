@@ -6,6 +6,15 @@ use core::alloc::Layout;
 use core::cell::Cell;
 use core::ptr::{slice_from_raw_parts_mut, NonNull};
 
+/// [LinearAllocator] is an arena allocator, meaning that deallocating
+/// individual allocations made by this allocator does nothing. Instead, the
+/// whole backing memory is dropped at once. Destructors for these objects
+/// are not called automatically and must be done by the caller if it's
+/// necessary.
+///
+/// Once the slice of memory that underpins the LinearAllocator has been
+/// allocated, allocations will begin to fail. It will not find new memory
+/// to back allocations.
 pub struct LinearAllocator<A: Allocator> {
     allocation_ptr: NonNull<u8>,
     allocation_layout: Layout,
@@ -14,6 +23,10 @@ pub struct LinearAllocator<A: Allocator> {
 }
 
 impl<A: Allocator> LinearAllocator<A> {
+    /// Creates a new [LinearAllocator] by requesting the `layout` from the
+    /// provided `allocator`. Note that if the allocation is over-sized,
+    /// meaning it's larger than the requested `layout.size()`, then the
+    /// [LinearAllocator] will utilize this excess.
     pub fn new_in(layout: Layout, allocator: A) -> Result<Self, AllocError> {
         let allocation = allocator.allocate(layout)?;
         // SAFETY: this is the size/align of the actual allocation.

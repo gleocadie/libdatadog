@@ -8,6 +8,16 @@ use core::cell::UnsafeCell;
 use core::mem::size_of;
 use core::ptr::NonNull;
 
+/// [ChainAllocator] is an arena allocator, meaning that deallocating
+/// individual allocations made by this allocator does nothing. Instead, the
+/// whole backing memory is dropped at once.  Destructors for these objects
+/// are not called automatically and must be done by the caller if it's
+/// necessary.
+///
+/// [ChainAllocator] creates a new [LinearAllocator] when the current one
+/// doesn't have enough space for the requested allocation, and then links the
+/// new [LinearAllocator] to the previous one, creating a chain. This is where
+/// its name comes from.
 pub struct ChainAllocator<A: Allocator + Clone> {
     top: UnsafeCell<ChainNodePtr<A>>,
     /// The size hint for the linear allocator's chunk.
@@ -48,6 +58,10 @@ impl<A: Allocator + Clone> ChainAllocator<A> {
     /// is worth it. This is somewhat arbitrarily chosen at the moment.
     const MIN_NODE_SIZE: usize = 4 * size_of::<Self>();
 
+    /// Creates a new [ChainAllocator]. The `chunk_size_hint` is used as a
+    /// size hint when creating new chunks. Note that there is a minimum size,
+    /// which can change from release to release, and this may not be a
+    /// suitable minimum for your purpose.
     pub const fn new_in(chunk_size_hint: usize, allocator: A) -> Self {
         Self {
             top: UnsafeCell::new(ChainNodePtr::new()),
