@@ -10,3 +10,6 @@ mod r#virtual;
 pub use chain::*;
 pub use linear::*;
 pub use r#virtual::*;
+
+// Expose allocator_api2 for our users.
+pub use allocator_api2::alloc::*;

@@ -1,7 +1,7 @@
 // Copyright 2024-Present Datadog, Inc. https://www.datadoghq.com/
 // SPDX-License-Identifier: Apache-2.0
 
-use allocator_api2::alloc::{AllocError, Allocator};
+use crate::{AllocError, Allocator};
 use core::alloc::Layout;
 use core::cell::Cell;
 use core::ptr::{slice_from_raw_parts_mut, NonNull};

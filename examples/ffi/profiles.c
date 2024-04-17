@@ -58,7 +58,7 @@ int main(void) {
   //   printf("Press any key to reset and drop...");
   //   getchar();
 
-  ddog_prof_Profile_Result reset_result = ddog_prof_Profile_reset(profile, NULL);
+  ddog_prof_Profile_Result reset_result = ddog_prof_Profile_reset(profile, sample_types, &period, NULL);
   if (reset_result.tag != DDOG_PROF_PROFILE_RESULT_OK) {
     ddog_CharSlice message = ddog_Error_message(&reset_result.err);
     fprintf(stderr, "%*s", (int)message.len, message.ptr);

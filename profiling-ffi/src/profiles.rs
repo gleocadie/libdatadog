@@ -689,11 +689,17 @@ pub unsafe extern "C" fn ddog_prof_Profile_serialize(
     profile: *mut Profile,
     end_time: Option<&Timespec>,
     duration_nanos: Option<&i64>,
+    sample_types: Slice<ValueType>,
+    period: Option<&Period>,
     start_time: Option<&Timespec>,
 ) -> SerializeResult {
     (|| {
         let profile = profile_ptr_to_inner(profile)?;
-        let old_profile = profile.reset_and_return_previous(start_time.map(SystemTime::from))?;
+
+        let start_time = start_time.map(SystemTime::from);
+        let types: Vec<api::ValueType> = sample_types.into_slice().iter().map(Into::into).collect();
+        let period = period.map(Into::into);
+        let old_profile = profile.reset_and_return_previous(start_time, &types, period)?;
         let end_time = end_time.map(SystemTime::from);
         let duration = match duration_nanos {
             None => None,
@@ -728,11 +734,16 @@ pub unsafe extern "C" fn ddog_Vec_U8_as_slice(vec: &ddcommon_ffi::Vec<u8>) -> Sl
 #[must_use]
 pub unsafe extern "C" fn ddog_prof_Profile_reset(
     profile: *mut Profile,
+    sample_types: Slice<ValueType>,
+    period: Option<&Period>,
     start_time: Option<&Timespec>,
 ) -> ProfileResult {
     (|| {
         let profile = profile_ptr_to_inner(profile)?;
-        profile.reset_and_return_previous(start_time.map(SystemTime::from))?;
+
+        let types: Vec<api::ValueType> = sample_types.into_slice().iter().map(Into::into).collect();
+        let period = period.map(Into::into);
+        profile.reset_and_return_previous(start_time.map(SystemTime::from), &types, period)?;
         anyhow::Ok(())
     })()
     .context("ddog_prof_Profile_reset failed")

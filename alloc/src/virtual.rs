@@ -1,7 +1,7 @@
 // Copyright 2024-Present Datadog, Inc. https://www.datadoghq.com/
 // SPDX-License-Identifier: Apache-2.0
 
-use allocator_api2::alloc::AllocError;
+use crate::AllocError;
 use core::alloc::Layout;
 
 #[derive(Clone, Copy, Debug)]
@@ -83,6 +83,10 @@ pub mod os {
 
     unsafe impl Allocator for VirtualAllocator {
         fn allocate(&self, layout: Layout) -> Result<ptr::NonNull<[u8]>, AllocError> {
+            self.allocate_zeroed(layout)
+        }
+
+        fn allocate_zeroed(&self, layout: Layout) -> Result<ptr::NonNull<[u8]>, AllocError> {
             let size = super::layout_to_page_size(layout)?;
 
             let null = ptr::null_mut();
@@ -138,6 +142,10 @@ pub mod os {
 
     unsafe impl Allocator for VirtualAllocator {
         fn allocate(&self, layout: Layout) -> Result<ptr::NonNull<[u8]>, AllocError> {
+            self.allocate_zeroed(layout)
+        }
+
+        fn allocate_zeroed(&self, layout: Layout) -> Result<ptr::NonNull<[u8]>, AllocError> {
             let size = super::layout_to_page_size(layout)?;
 
             let null = ptr::null_mut();

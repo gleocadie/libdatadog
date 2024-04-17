@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::LinearAllocator;
-use allocator_api2::alloc::{AllocError, Allocator};
+use crate::{AllocError, Allocator};
 use core::alloc::Layout;
 use core::cell::UnsafeCell;
 use core::mem::size_of;
