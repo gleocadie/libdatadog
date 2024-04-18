@@ -126,6 +126,7 @@ pub mod os {
     use allocator_api2::alloc::{AllocError, Allocator};
     use core::alloc::Layout;
     use core::{mem, ptr};
+    use windows_sys::Win32::System::Memory;
     use windows_sys::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
 
     pub fn page_size() -> Result<usize, AllocError> {
