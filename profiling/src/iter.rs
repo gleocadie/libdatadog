@@ -12,6 +12,7 @@ pub trait LendingIterator {
 
     fn next(&mut self) -> Option<Self::Item<'_>>;
 
+    #[allow(unused)]
     fn count(self) -> usize;
 }
 

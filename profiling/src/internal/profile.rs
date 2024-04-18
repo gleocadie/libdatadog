@@ -841,7 +841,17 @@ mod api_test {
             unit: "count",
         }];
         let prev = profile
-            .reset_and_return_previous(None, sample_types, None)
+            .reset_and_return_previous(
+                None,
+                sample_types,
+                Some(api::Period {
+                    r#type: api::ValueType {
+                        r#type: "wall-time",
+                        unit: "nanoseconds",
+                    },
+                    value: 10_000_000,
+                }),
+            )
             .expect("reset to succeed");
         assert_eq!(Some(period), prev.period);
 
