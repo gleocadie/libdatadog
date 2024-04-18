@@ -137,7 +137,7 @@ pub mod os {
         // should be safe to assume system_info was initialized.
         let system_info = unsafe { system_info.assume_init() };
 
-        crate::validate_page_size!(system_info.dwPageSize)
+        validate_page_size!(system_info.dwPageSize)
     }
 
     unsafe impl Allocator for VirtualAllocator {
