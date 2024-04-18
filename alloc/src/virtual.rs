@@ -56,6 +56,9 @@ fn pad_to_pow2(num: usize, pow2: usize) -> Option<usize> {
 
 macro_rules! validate_page_size {
     ($x:expr) => {
+        // On some platforms this may be unsigned or signed. We don't care if
+        // this macro generates "dead code" for such things.
+        #[allow(unused_comparisons)]
         if $x < 0 {
             Err(AllocError)
         } else {
