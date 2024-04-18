@@ -167,7 +167,7 @@ pub mod os {
         }
 
         unsafe fn deallocate(&self, ptr: ptr::NonNull<u8>, _layout: Layout) {
-            _ = Memory::VirtualFree(ptr.cast(), 0, Memory::MEM_RELEASE);
+            _ = Memory::VirtualFree(ptr.as_ptr() as *mut _, 0, Memory::MEM_RELEASE);
         }
     }
 }
