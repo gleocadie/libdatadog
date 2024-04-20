@@ -63,6 +63,7 @@ impl MessagePackDecoder {
     pub fn decode<R: Read>(&mut self, mut rd: R) {
         while let Ok(event_type) = read_int(&mut rd) {
             println!("{:#?}", event_type);
+
             match event_type {
                 -2 =>  self.decode_segments(&mut rd),
                 -1 =>  self.decode_strings(&mut rd),

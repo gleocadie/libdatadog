@@ -92,6 +92,8 @@ impl Processor {
     }
 
     pub fn process(&mut self, event: Event) {
+        println!("{:#?}", event);
+
         match event {
             Event::StartSegment(event) => self.process_start_segment(event),
             Event::FinishSegment(event) => self.process_finish_segment(event),
