@@ -83,8 +83,8 @@ impl AgentExporter {
         }
     }
 
-    fn cache_strings(&self, strings: &mut Vec<Rc<str>>, positions: &mut HashMap<Rc<str>, u32>, trace: &Segment) {
-        for span in trace.spans.values() {
+    fn cache_strings(&self, strings: &mut Vec<Rc<str>>, positions: &mut HashMap<Rc<str>, u32>, segment: &Segment) {
+        for span in segment.spans.iter() {
             self.cache_string(strings, positions, &span.service);
             self.cache_string(strings, positions, &span.name);
             self.cache_string(strings, positions, &span.resource);
@@ -145,19 +145,18 @@ impl AgentExporter {
     fn encode_segment(&self, wr: &mut ByteBuf, segment: &Segment, positions: &HashMap<Rc<str>, u32>) {
         encode::write_array_len(wr, segment.spans.len() as u32).unwrap();
 
-        for span in segment.spans.values() {
-            self.encode_span(wr, segment, span, positions);
+        for span in segment.spans.iter() {
+            self.encode_span(wr, segment, &span, positions);
         }
     }
 
     fn encode_span(&self, wr: &mut ByteBuf, segment: &Segment, span: &Span, positions: &HashMap<Rc<str>, u32>) {
-        let trace_id = u64::try_from(segment.trace_id >> 64).unwrap(); // TODO: lower bits
         encode::write_array_len(wr, 12).unwrap();
 
         encode::write_uint(wr, positions[&span.service] as u64).unwrap();
         encode::write_uint(wr, positions[&span.name] as u64).unwrap();
         encode::write_uint(wr, positions[&span.resource] as u64).unwrap();
-        encode::write_uint(wr, trace_id).unwrap();
+        encode::write_uint(wr, segment.trace_id as u64).unwrap();
         encode::write_uint(wr, span.span_id).unwrap();
         encode::write_uint(wr, span.parent_id).unwrap();
         encode::write_uint(wr, span.start).unwrap();

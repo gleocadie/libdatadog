@@ -22,7 +22,7 @@ pub struct StartSpanEvent {
     pub ticks: u64,
     pub segment_id: u64,
     pub span_id: u64,
-    pub parent_id: u64,
+    pub parent_index: usize,
     pub service: Rc<str>,
     pub name: Rc<str>,
     pub resource: Rc<str>,
@@ -35,13 +35,13 @@ pub struct StartSpanEvent {
 pub struct FinishSpanEvent {
     pub ticks: u64,
     pub segment_id: u64,
-    pub span_id: u64,
+    pub span_index: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct ExceptionEvent {
     pub segment_id: u64,
-    pub span_id: u64,
+    pub span_index: usize,
     pub message: Rc<str>,
     pub name: Rc<str>,
     pub stack: Rc<str>,
@@ -50,13 +50,13 @@ pub struct ExceptionEvent {
 #[derive(Clone, Debug)]
 pub struct ErrorEvent {
     pub segment_id: u64,
-    pub span_id: u64,
+    pub span_index: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct AddTagsEvent {
     pub segment_id: u64,
-    pub span_id: u64,
+    pub span_index: usize,
     pub meta: HashMap<Rc<str>, Rc<str>>,
     pub metrics: HashMap<Rc<str>, f64>,
 }
@@ -67,6 +67,11 @@ pub struct SamplingPriorityEvent {
     pub priority: i8,
     pub mechanism: i8,
     pub rate: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct DiscardEvent {
+    pub segment_id: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +87,7 @@ pub enum Event {
     Config(Config),
     ProcessInfo(ProcessInfo),
     SamplingPriority(SamplingPriorityEvent),
+    Discard(DiscardEvent),
 
     // Private events
     FlushTraces,

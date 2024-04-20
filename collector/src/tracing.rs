@@ -27,15 +27,5 @@ pub struct Segment {
     pub started: u64,
     pub finished: u64,
     pub root: u64,
-    pub spans: HashMap<u64, Span>
+    pub spans: Vec<Span>
 }
-
-// impl Default for Segment {
-//     fn default() -> Self {
-//         Self {
-//             started: 0,
-//             finished: 0,
-//             spans: HashMap::new()
-//         }
-//     }
-// }

@@ -1,6 +1,6 @@
 use crate::commands::Command;
 use crate::config::Config;
-use crate::events::{AddTagsEvent, ErrorEvent, Event, ExceptionEvent, FinishSegmentEvent, FinishSpanEvent, SamplingPriorityEvent, StartSegmentEvent, StartSpanEvent};
+use crate::events::{AddTagsEvent, DiscardEvent, ErrorEvent, Event, ExceptionEvent, FinishSegmentEvent, FinishSpanEvent, SamplingPriorityEvent, StartSegmentEvent, StartSpanEvent};
 use crate::exporting::agent::AgentExporter;
 use crate::metadata::ProcessInfo;
 use crate::tracing::{Span, Segment, Segments};
@@ -103,6 +103,7 @@ impl Processor {
             Event::Config(config) => self.process_config(config),
             Event::ProcessInfo(info) => self.process_process_info(info),
             Event::SamplingPriority(event) => self.process_sampling_priority(event),
+            Event::Discard(event) => self.process_discard(event),
             Event::FlushTraces => self.flush(),
         }
     }
@@ -118,7 +119,7 @@ impl Processor {
         let stack_key = self.from_str("error.stack");
 
         if let Some(segment) = self.segments.get_mut(&event.segment_id) {
-            if let Some(span) = segment.spans.get_mut(&event.span_id) {
+            if let Some(span) = segment.spans.get_mut(event.span_index) {
                 span.error = 1;
 
                 span.meta.insert(message_key, event.message);
@@ -130,7 +131,7 @@ impl Processor {
 
     fn process_error(&mut self, event: ErrorEvent) {
         if let Some(segment) = self.segments.get_mut(&event.segment_id) {
-            if let Some(span) = segment.spans.get_mut(&event.span_id) {
+            if let Some(span) = segment.spans.get_mut(event.span_index) {
                 span.error = 1;
             }
         }
@@ -138,7 +139,7 @@ impl Processor {
 
     fn process_add_tags(&mut self, event: AddTagsEvent) {
         if let Some(trace) = self.segments.get_mut(&event.segment_id) {
-            if let Some(mut span) = trace.spans.get_mut(&event.span_id) {
+            if let Some(mut span) = trace.spans.get_mut(event.span_index) {
                 Self::add_tags(&mut span, event.meta, event.metrics);
             }
         }
@@ -150,8 +151,8 @@ impl Processor {
             trace_id: event.trace_id,
             started: 0,
             finished: 0,
-            root: 0,
-            spans: HashMap::new(),
+            root: event.parent_id,
+            spans: Vec::new(),
         };
 
         self.segments.insert(event.segment_id, segment);
@@ -161,7 +162,7 @@ impl Processor {
         let segment = self.segments.get_mut(&event.segment_id);
 
         if let Some(segment) = segment {
-            for (_, span) in &mut segment.spans {
+            for span in &mut segment.spans {
                 if span.duration == 0 {
                     span.duration = segment.start + event.ticks - span.start;
                 }
@@ -172,35 +173,41 @@ impl Processor {
     }
 
     fn process_start_span(&mut self, event: StartSpanEvent) {
-        let segment = self.segments.get_mut(&event.segment_id).unwrap();
-        let start = segment.start + event.ticks;
-        let mut span = Span {
-            start,
-            span_id: event.span_id,
-            parent_id: event.parent_id,
-            span_type: event.span_type,
-            name: event.name,
-            resource: event.resource,
-            service: event.service,
-            error: 0,
-            duration: 0,
-            meta: HashMap::new(),
-            metrics: HashMap::new()
+        if let Some(segment) = self.segments.get_mut(&event.segment_id) {
+            let start = segment.start + event.ticks;
+            let parent_id = match event.parent_index {
+                0 => segment.root,
+                _ => segment.spans.get(event.parent_index - 1).unwrap().span_id,
+            };
+
+            let mut span = Span {
+                start,
+                span_id: event.span_id,
+                parent_id,
+                span_type: event.span_type,
+                name: event.name,
+                resource: event.resource,
+                service: event.service,
+                error: 0,
+                duration: 0,
+                meta: HashMap::new(),
+                metrics: HashMap::new()
+            };
+
+            Self::add_tags(&mut span, event.meta, event.metrics);
+
+            if segment.root == 0 {
+                segment.root = span.span_id;
+            }
+
+            segment.started += 1;
+            segment.spans.push(span);
         };
-
-        Self::add_tags(&mut span, event.meta, event.metrics);
-
-        if segment.root == 0 {
-            segment.root = span.span_id;
-        }
-
-        segment.started += 1;
-        segment.spans.insert(span.span_id, span);
     }
 
     fn process_finish_span(&mut self, event: FinishSpanEvent) {
         if let Some(segment) = self.segments.get_mut(&event.segment_id) {
-            if let Some(span) = segment.spans.get_mut(&event.span_id) {
+            if let Some(span) = segment.spans.get_mut(event.span_index) {
                 segment.finished += 1;
                 span.duration = segment.start + event.ticks - span.start;
             }
@@ -211,10 +218,14 @@ impl Processor {
         let priority_key = self.from_str("error.stack");
 
         if let Some(segment) = self.segments.get_mut(&event.segment_id) {
-            if let Some(span) = segment.spans.get_mut(&segment.root) {
+            if let Some(span) = segment.spans.get_mut(0) {
                 span.metrics.insert(priority_key, event.priority as f64);
             }
         }
+    }
+
+    fn process_discard(&mut self, event: DiscardEvent) {
+        self.segments.remove(&event.segment_id);
     }
 
     fn process_config(&mut self, config: Config) {
@@ -224,36 +235,6 @@ impl Processor {
     fn process_process_info(&mut self, info: ProcessInfo) {
         self.process_info = Some(info);
     }
-
-    // fn process_flush_traces(&mut self, _: &[Rc<str>]) {
-    //     // println!("{}", "flushing");
-    //     // self.flush();
-    // }
-
-    // fn read_tags<R: Read>(&self, mut rd: R, strings: &[Rc<str>]) -> (Meta, Metrics){
-    //     let mut meta = HashMap::new();
-    //     let mut metrics = HashMap::new();
-
-    //     let meta_size = read_map_len(&mut rd).unwrap();
-
-    //     for _ in 0..meta_size {
-    //         meta.insert(
-    //             strings[read_usize(&mut rd).unwrap()].clone(),
-    //             strings[read_usize(&mut rd).unwrap()].clone()
-    //         );
-    //     }
-
-    //     let metrics_size = read_map_len(&mut rd).unwrap();
-
-    //     for _ in 0..metrics_size {
-    //         metrics.insert(
-    //             strings[read_usize(&mut rd).unwrap()].clone(),
-    //             read_f64(&mut rd).unwrap()
-    //         );
-    //     }
-
-    //     (meta, metrics)
-    // }
 
     fn from_str(&mut self, s: &str) -> Rc<str> {
         match self.strings.get(s) {

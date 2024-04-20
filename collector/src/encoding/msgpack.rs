@@ -9,15 +9,13 @@ use crate::events::*;
 use crate::tracing::{Meta, Metrics};
 
 pub struct Segment {
-    id: u64,
-    spans: Vec<u64>,
+    id: u64
 }
 
 impl Segment {
     pub fn new(id: u64) -> Self {
         Self {
-            id,
-            spans: Vec::new(),
+            id
         }
     }
 }
@@ -93,6 +91,7 @@ impl MessagePackDecoder {
                 138 => self.decode_error(&mut rd),
                 139 => self.decode_finish_segment(&mut rd),
                 140 => self.decode_config(&mut rd),
+                141 => self.decode_discard(&mut rd),
                 _ => (),
             };
         }
@@ -116,7 +115,7 @@ impl MessagePackDecoder {
     fn decode_segments<R: Read>(&mut self, mut rd: R) {
         let size = read_array_len(&mut rd).unwrap();
 
-        for _ in 1..size {
+        for _ in 0..size {
             let id = read_int(&mut rd).unwrap();
             let segment = Segment::new(id);
 
@@ -144,8 +143,6 @@ impl MessagePackDecoder {
             parent_id,
         });
 
-        segment.spans.push(parent_id);
-
         self.tx.send(event).unwrap();
     }
 
@@ -167,14 +164,14 @@ impl MessagePackDecoder {
         read_array_len(&mut rd).unwrap();
 
         let segment = self.get_segment(&mut rd).unwrap();
-        let span_id = self.get_span_id(segment, &mut rd).unwrap();
+        let span_index = self.read_index(&mut rd).unwrap();
         let message = self.strings[self.read_index(&mut rd).unwrap()].clone();
         let name = self.strings[self.read_index(&mut rd).unwrap()].clone();
         let stack = self.strings[self.read_index(&mut rd).unwrap()].clone();
 
         let event = Event::Exception(ExceptionEvent {
             segment_id: segment.id,
-            span_id,
+            span_index,
             message,
             name,
             stack,
@@ -191,11 +188,11 @@ impl MessagePackDecoder {
         read_array_len(&mut rd).unwrap();
 
         let segment = self.get_segment(&mut rd).unwrap();
-        let span_id = self.get_span_id(segment, &mut rd).unwrap();
+        let span_index = self.read_index(&mut rd).unwrap();
 
         let event = Event::Error(ErrorEvent {
             segment_id: segment.id,
-            span_id,
+            span_index,
         });
 
         self.tx.send(event).unwrap();
@@ -205,9 +202,10 @@ impl MessagePackDecoder {
         read_array_len(&mut rd).unwrap();
 
         let ticks = read_int(&mut rd).unwrap();
-        let segment = self.get_segment(&mut rd).unwrap();
+        let segment_index = self.read_index(&mut rd).unwrap();
+        let segment = self.segments.get(segment_index).unwrap();
         let span_id = self.read_span_id(&mut rd).unwrap();
-        let parent_id = self.get_span_id(segment, &mut rd).unwrap();
+        let parent_index = self.read_index(&mut rd).unwrap();
         let service = self.strings[self.read_index(&mut rd).unwrap()].clone();
         let name = self.strings[self.read_index(&mut rd).unwrap()].clone();
         let resource = self.strings[self.read_index(&mut rd).unwrap()].clone();
@@ -218,7 +216,7 @@ impl MessagePackDecoder {
             ticks,
             segment_id: segment.id,
             span_id,
-            parent_id,
+            parent_index,
             service,
             name,
             resource,
@@ -235,12 +233,12 @@ impl MessagePackDecoder {
 
         let ticks = read_int(&mut rd).unwrap();
         let segment = self.get_segment(&mut rd).unwrap();
-        let span_id = self.get_span_id(segment, &mut rd).unwrap();
+        let span_index = self.read_index(&mut rd).unwrap();
 
         let event = Event::FinishSpan(FinishSpanEvent {
             ticks,
             segment_id: segment.id,
-            span_id,
+            span_index,
         });
 
         self.tx.send(event).unwrap();
@@ -250,12 +248,12 @@ impl MessagePackDecoder {
         read_array_len(&mut rd).unwrap();
 
         let segment = self.get_segment(&mut rd).unwrap();
-        let span_id = self.get_span_id(segment, &mut rd).unwrap();
+        let span_index = self.read_index(&mut rd).unwrap();
         let (meta, metrics) = self.read_tags(&mut rd, &self.strings);
 
         let event = Event::AddTags(AddTagsEvent {
             segment_id: segment.id,
-            span_id,
+            span_index,
             meta,
             metrics,
         });
@@ -284,6 +282,18 @@ impl MessagePackDecoder {
     fn decode_config<R: Read>(&mut self, mut rd: R) {
         let config = rmp_serde::from_read(&mut rd).unwrap();
         let event = Event::Config(config);
+
+        self.tx.send(event).unwrap();
+    }
+
+    fn decode_discard<R: Read>(&mut self, mut rd: R) {
+        read_array_len(&mut rd).unwrap();
+
+        let segment = self.get_segment(&mut rd).unwrap();
+
+        let event = Event::Discard(DiscardEvent {
+            segment_id: segment.id,
+        });
 
         self.tx.send(event).unwrap();
     }
@@ -371,13 +381,6 @@ impl MessagePackDecoder {
         let segment = self.segments.get(segment_index).unwrap();
 
         Ok(segment)
-    }
-
-    fn get_span_id<R: Read>(&self, segment: &Segment, mut rd: R) -> Result<u64, NumValueReadError> {
-        let span_index = self.read_index(&mut rd)?;
-        let span_id = segment.spans.get(span_index).unwrap_or(&0);
-
-        Ok(*span_id)
     }
 
     fn reset_stream(&mut self) {
