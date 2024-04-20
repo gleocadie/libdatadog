@@ -92,7 +92,7 @@ impl Processor {
     }
 
     pub fn process(&mut self, event: Event) {
-        println!("{:#?}", event);
+        // println!("{:#?}", event);
 
         match event {
             Event::StartSegment(event) => self.process_start_segment(event),
