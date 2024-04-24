@@ -75,6 +75,12 @@ impl StringTable {
     /// Adds the string to the string table if it isn't present already, and
     /// returns a [StringId] that corresponds to the order that this string
     /// was originally inserted.
+    ///
+    /// # Panics
+    /// This panics if the allocator fails to allocate. This could happen for
+    /// a few reasons:
+    ///  - It failed to acquire a chunk.
+    ///  - The string is too large (larger than a chunk size, for example)
     pub fn intern(&mut self, s: impl Borrow<str>) -> StringId {
         let str = s.borrow();
 
@@ -88,12 +94,13 @@ impl StringTable {
 
                 // Allocate the string with alignment of 1 so that bytes are
                 // not wasted between strings.
-                // SAFETY: todo
-                let uninit_ptr = unsafe {
-                    self.bytes
-                        .allocate(Layout::from_size_align(str.len(), 1).unwrap_unchecked())
-                }
-                .unwrap();
+                let uninit_ptr = {
+                    // SAFETY: this layout matches an existing string, it must
+                    // be a valid layout since it already exists.
+                    let layout =
+                        unsafe { Layout::from_size_align(str.len(), 1).unwrap_unchecked() };
+                    self.bytes.allocate(layout).unwrap()
+                };
 
                 // Copy the bytes of the string into the allocated memory.
                 // SAFETY: this is guaranteed to not be overlapping because an
