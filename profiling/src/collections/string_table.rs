@@ -10,11 +10,19 @@ use std::borrow::Borrow;
 type Hasher = core::hash::BuildHasherDefault<rustc_hash::FxHasher>;
 type HashSet<K> = indexmap::IndexSet<K, Hasher>;
 
+/// Holds unique strings and provides [StringId]s that correspond to the order
+/// that the strings were inserted.
 pub struct StringTable {
-    string_storage: ChainAllocator<VirtualAllocator>,
+    /// The bytes of each string stored in `strings` are allocated here.
+    bytes: ChainAllocator<VirtualAllocator>,
 
-    // The static lifetime is a lie, it is tied to the string_storage.
-    // References to the underlying strings should not be handed out.
+    /// The ordered hash set of unique strings. The order becomes the StringId.
+    /// The static lifetime is a lie, it is tied to the `bytes`, which is only
+    /// moved if the string table is moved e.g.
+    /// [StringTable::into_lending_iterator].
+    /// References to the underlying strings should generally not be handed,
+    /// but if they are, they should be bound to the string table's lifetime
+    /// or the lending iterator's lifetime.
     strings: HashSet<&'static str>,
 }
 
@@ -25,84 +33,120 @@ impl Default for StringTable {
 }
 
 impl StringTable {
+    /// Creates a new string table, which initially holds the empty string and
+    /// no others.
     pub fn new() -> Self {
         // Christophe and Grégory think this is a fine size for 32-bit .NET.
         const SIZE_HINT: usize = 4 * 1024 * 1024;
-        Self {
-            string_storage: ChainAllocator::new_in(SIZE_HINT, VirtualAllocator {}),
-            strings: HashSet::with_hasher(Hasher::default()),
-        }
+        let bytes = ChainAllocator::new_in(SIZE_HINT, VirtualAllocator {});
+
+        let mut strings = HashSet::with_hasher(Hasher::default());
+        // It various by implementation, but frequently I've noticed that the
+        // capacity after the first insertion is quite small, as in 3. This is
+        // a bit too small and there are frequent reallocations. For one sample
+        // with endpoint + code hotspots, we'd have at least these strings:
+        // - ""
+        // - At least one sample type
+        // - At least one sample unit--already at 3 without any samples.
+        // - "local root span id"
+        // - "span id"
+        // - "trace endpoint"
+        // - A file and/or function name per frame.
+        // So with a capacity like 3, we end up reallocating a bunch on or
+        // before the very first sample. The number here is not fine-tuned,
+        // just skipping some obviously bad, tiny sizes.
+        strings.reserve(32);
+
+        // Always hold the empty string as item 0. Do not insert it via intern
+        // because that will try to allocate zero-bytes from the storage,
+        // which is sketchy.
+        strings.insert("");
+
+        Self { bytes, strings }
     }
 
+    /// Returns the number of strings currently held in the string table.
     #[inline]
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
-        // always holds the empty string
-        self.strings.len() + 1
+        self.strings.len()
     }
 
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        // always holds the empty string
-        false
-    }
-
+    /// Adds the string to the string table if it isn't present already, and
+    /// returns a [StringId] that corresponds to the order that this string
+    /// was originally inserted.
     pub fn intern(&mut self, s: impl Borrow<str>) -> StringId {
         let str = s.borrow();
-        if str.is_empty() {
-            return StringId::ZERO;
-        }
 
         let set = &mut self.strings;
         match set.get_index_of(str) {
-            Some(offset) => StringId::from_offset(offset + 1),
+            Some(offset) => StringId::from_offset(offset),
             None => {
-                // It's +1 because the empty str is not held, but the string
-                // table acts as if it is.
-                let len = set.len() + 1;
-                let string_id = StringId::from_offset(len);
+                // No match. Get the current size of the table, which
+                // corresponds to the StringId it will have when inserted.
+                let string_id = StringId::from_offset(set.len());
 
+                // Allocate the string with alignment of 1 so that bytes are
+                // not wasted between strings.
                 // SAFETY: todo
                 let uninit_ptr = unsafe {
-                    self.string_storage
+                    self.bytes
                         .allocate(Layout::from_size_align(str.len(), 1).unwrap_unchecked())
                 }
                 .unwrap();
-                // SAFETY: todo
+
+                // Copy the bytes of the string into the allocated memory.
+                // SAFETY: this is guaranteed to not be overlapping because an
+                // allocator must not return aliasing bytes in its allocations.
                 unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        str.as_ptr(),
-                        uninit_ptr.as_ptr() as *mut u8,
-                        str.len(),
-                    )
+                    let src = str.as_ptr();
+                    let dst = uninit_ptr.as_ptr() as *mut u8;
+                    let count = str.len();
+                    core::ptr::copy_nonoverlapping(src, dst, count)
                 };
-                // SAFETY: todo
-                self.strings.insert(unsafe {
-                    core::str::from_utf8_unchecked(core::slice::from_raw_parts(
-                        uninit_ptr.as_ptr() as *const u8,
-                        str.len(),
-                    ))
-                });
+
+                // Convert the bytes into a str, and insert into the set.
+
+                // SAFETY: The bytes were properly initialized, and they cannot
+                // be misaligned because they have an alignment of 1, so it is
+                // safe to create a slice of the given data and length. The
+                // static lifetime is _wrong_, and we need to be careful. Any
+                // references returned to a caller must be tied to the lifetime
+                // of the string table, or to the iterator if iterating.
+                let slice: &'static [u8] = unsafe {
+                    core::slice::from_raw_parts(uninit_ptr.as_ptr() as *const u8, str.len())
+                };
+
+                // SAFETY: Since the bytes were copied from a valid str without
+                // slicing, the bytes must also be utf-8.
+                let new_str = unsafe { core::str::from_utf8_unchecked(slice) };
+
+                self.strings.insert(new_str);
                 string_id
             }
         }
     }
 }
 
+/// A [LendingIterator] for a [StringTable]. Make one by calling
+/// [StringTable::into_lending_iter].
 pub struct StringTableIter {
-    // This is actually used, the compiler doesn't know that the 'static
-    // references actually point in here.
+    /// This is actually used, the compiler doesn't know that the static
+    /// references in `iter` actually point in here.
     #[allow(unused)]
-    string_storage: ChainAllocator<VirtualAllocator>,
+    bytes: ChainAllocator<VirtualAllocator>,
 
-    // The static lifetime is a lie, it is tied to the string_storage.
-    // References to the underlying strings should not be handed out.
+    /// The strings of the string table, in order of insertion.
+    /// The static lifetimes are a lie, they are tied to the `bytes`. When
+    /// handing out references, bind the lifetime to the iterator's lifetime,
+    /// which is a [LendingIterator] is needed.
     iter: <HashSet<&'static str> as IntoIterator>::IntoIter,
 }
 
 impl StringTableIter {
     fn new(string_table: StringTable) -> StringTableIter {
         StringTableIter {
-            string_storage: string_table.string_storage,
+            bytes: string_table.bytes,
             iter: string_table.strings.into_iter(),
         }
     }
@@ -135,9 +179,65 @@ mod tests {
     #[test]
     fn test_basics() {
         let mut table = StringTable::new();
+        // The empty string should already be present.
+        assert_eq!(1, table.len());
         assert_eq!(StringId::ZERO, table.intern(""));
 
-        let first_string = table.intern("datadog");
-        assert_eq!(StringId::from_offset(1), first_string);
+        // Intern a string literal to ensure ?Sized works.
+        let string = table.intern("datadog");
+        assert_eq!(StringId::from_offset(1), string);
+        assert_eq!(2, table.len());
+    }
+
+    #[test]
+    fn test_small_sample_equivalent_of_strings() {
+        let cases: &[_] = &[
+            (StringId::ZERO, ""),
+            (StringId::from_offset(1), "local root span id"),
+            (StringId::from_offset(2), "span id"),
+            (StringId::from_offset(3), "trace endpoint"),
+            (StringId::from_offset(4), "samples"),
+            (StringId::from_offset(5), "count"),
+            (StringId::from_offset(6), "wall-time"),
+            (StringId::from_offset(7), "nanoseconds"),
+            (StringId::from_offset(8), "cpu-time"),
+            (StringId::from_offset(9), "<?php"),
+            (StringId::from_offset(10), "/srv/demo/public/index.php"),
+            (StringId::from_offset(11), "pid"),
+            (StringId::from_offset(12), "/var/www/public/index.php"),
+            (StringId::from_offset(13), "main"),
+            (StringId::from_offset(14), "thread id"),
+            (
+                StringId::from_offset(15),
+                "A\\Very\\Long\\Php\\Namespace\\Class::method",
+            ),
+            (StringId::from_offset(16), "/"),
+        ];
+
+        let mut table = StringTable::new();
+
+        // Insert the cases, checking the string ids in turn.
+        for (offset, str) in cases.iter() {
+            let actual_offset = table.intern(*str);
+            assert_eq!(*offset, actual_offset);
+        }
+        assert_eq!(cases.len(), table.len());
+
+        // Insert again to ensure they aren't re-added.
+        for (string_id, str) in cases.iter() {
+            let actual_string_id = table.intern(*str);
+            assert_eq!(*string_id, actual_string_id);
+        }
+        assert_eq!(cases.len(), table.len());
+
+        // Check that they are ordered correctly when iterating.
+        let mut table_iter = table.into_lending_iter();
+        let mut case_iter = cases.iter();
+        while let (Some(item), Some((_, case))) = (table_iter.next(), case_iter.next()) {
+            assert_eq!(*case, item);
+        }
+
+        // The iterator should be exhausted at this point.
+        assert_eq!(0, table_iter.count());
     }
 }

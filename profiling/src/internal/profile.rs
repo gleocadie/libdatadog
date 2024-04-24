@@ -290,8 +290,6 @@ impl Profile {
         }
 
         let mut lender = self.strings.into_lending_iter();
-        // todo: should this empty str be moved into the iter somehow?
-        encoder.encode_string_table_entry("")?;
         while let Some(item) = lender.next() {
             encoder.encode_string_table_entry(item)?;
         }
@@ -814,7 +812,7 @@ mod api_test {
         assert_eq!(profile.sample_types, prev.sample_types);
 
         // The string table should have at least the empty string.
-        assert!(!profile.strings.is_empty());
+        assert!(profile.strings.len() > 0);
 
         // todo: how to test strings?
         // assert_eq!("", profile.get_string(StringId::ZERO));
