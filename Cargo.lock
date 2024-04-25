@@ -822,6 +822,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "chrono",
+ "criterion",
  "datadog-alloc",
  "ddcommon",
  "derivative",

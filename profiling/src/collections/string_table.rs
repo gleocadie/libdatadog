@@ -222,14 +222,14 @@ mod tests {
 
         // Insert the cases, checking the string ids in turn.
         for (offset, str) in cases.iter() {
-            let actual_offset = table.intern(*str);
+            let actual_offset = table.intern(str);
             assert_eq!(*offset, actual_offset);
         }
         assert_eq!(cases.len(), table.len());
 
         // Insert again to ensure they aren't re-added.
         for (string_id, str) in cases.iter() {
-            let actual_string_id = table.intern(*str);
+            let actual_string_id = table.intern(str);
             assert_eq!(*string_id, actual_string_id);
         }
         assert_eq!(cases.len(), table.len());
@@ -243,5 +243,47 @@ mod tests {
 
         // The iterator should be exhausted at this point.
         assert_eq!(0, table_iter.count());
+    }
+
+    use crate::pprof;
+    use lz4_flex::frame::FrameDecoder;
+    use prost::Message;
+    use std::fs::File;
+    use std::io::{copy, Cursor};
+
+    /// Test inserting strings from a real WordPress profile, although it's
+    /// unknown at this point which profiler version generated it. It's a small
+    /// sample. Here we're checking that we don't panic or otherwise fail, and
+    /// that the total number of strings and the number of bytes of those
+    /// strings match the profile.
+    #[test]
+    #[cfg_attr(miri, ignore)] // This test is too slow for miri
+    fn test_wordpress() {
+        // Load up the compressed profile.
+        let compressed_size = 101824_u64;
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/wordpress.pprof.lz4");
+        let mut decoder = FrameDecoder::new(File::open(path).unwrap());
+        let mut bytes = Vec::with_capacity(compressed_size as usize);
+        copy(&mut decoder, &mut bytes).unwrap();
+
+        let pprof = pprof::Profile::decode(&mut Cursor::new(&bytes)).unwrap();
+
+        // Insert all the strings, calculating the correct number of strings
+        // and string bytes.
+        let mut table = StringTable::new();
+        let n_strings = pprof.string_table.len();
+        let mut expected_bytes = 0;
+        for string in &pprof.string_table {
+            expected_bytes += string.len();
+            table.intern(string);
+        }
+        assert_eq!(n_strings, table.len());
+
+        let mut string_iter = table.into_lending_iter();
+        let mut actual_bytes = 0;
+        while let Some(string) = string_iter.next() {
+            actual_bytes += string.len();
+        }
+        assert_eq!(expected_bytes, actual_bytes);
     }
 }
