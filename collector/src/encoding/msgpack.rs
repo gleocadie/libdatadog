@@ -371,6 +371,7 @@ impl MessagePackDecoder {
     }
 
     fn reset_stream(&mut self) {
-
+        self.strings.shrink_to(1);
+        self.segments.shrink_to(1);
     }
 }
