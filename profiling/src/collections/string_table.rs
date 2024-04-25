@@ -5,7 +5,6 @@ use crate::collections::identifiable::{Id, StringId};
 use crate::iter::{IntoLendingIterator, LendingIterator};
 use datadog_alloc::{Allocator, ChainAllocator, VirtualAllocator};
 use std::alloc::Layout;
-use std::borrow::Borrow;
 
 type Hasher = core::hash::BuildHasherDefault<rustc_hash::FxHasher>;
 type HashSet<K> = indexmap::IndexSet<K, Hasher>;
@@ -81,9 +80,7 @@ impl StringTable {
     /// a few reasons:
     ///  - It failed to acquire a chunk.
     ///  - The string is too large (larger than a chunk size, for example)
-    pub fn intern(&mut self, s: impl Borrow<str>) -> StringId {
-        let str = s.borrow();
-
+    pub fn intern(&mut self, str: &str) -> StringId {
         let set = &mut self.strings;
         match set.get_index_of(str) {
             Some(offset) => StringId::from_offset(offset),
