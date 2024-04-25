@@ -176,6 +176,9 @@ impl IntoLendingIterator for StringTable {
     }
 }
 
+#[allow(unused)]
+pub mod wordpress_test_data;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,97 +196,65 @@ mod tests {
         assert_eq!(2, table.len());
     }
 
-    #[test]
-    fn test_small_sample_equivalent_of_strings() {
-        let cases: &[_] = &[
-            (StringId::ZERO, ""),
-            (StringId::from_offset(1), "local root span id"),
-            (StringId::from_offset(2), "span id"),
-            (StringId::from_offset(3), "trace endpoint"),
-            (StringId::from_offset(4), "samples"),
-            (StringId::from_offset(5), "count"),
-            (StringId::from_offset(6), "wall-time"),
-            (StringId::from_offset(7), "nanoseconds"),
-            (StringId::from_offset(8), "cpu-time"),
-            (StringId::from_offset(9), "<?php"),
-            (StringId::from_offset(10), "/srv/demo/public/index.php"),
-            (StringId::from_offset(11), "pid"),
-            (StringId::from_offset(12), "/var/www/public/index.php"),
-            (StringId::from_offset(13), "main"),
-            (StringId::from_offset(14), "thread id"),
-            (
-                StringId::from_offset(15),
-                "A\\Very\\Long\\Php\\Namespace\\Class::method",
-            ),
-            (StringId::from_offset(16), "/"),
-        ];
-
+    #[track_caller]
+    fn test_from_src(src: &[&str]) {
+        // Insert all the strings.
         let mut table = StringTable::new();
-
-        // Insert the cases, checking the string ids in turn.
-        for (offset, str) in cases.iter() {
-            let actual_offset = table.intern(str);
-            assert_eq!(*offset, actual_offset);
-        }
-        assert_eq!(cases.len(), table.len());
-
-        // Insert again to ensure they aren't re-added.
-        for (string_id, str) in cases.iter() {
-            let actual_string_id = table.intern(str);
-            assert_eq!(*string_id, actual_string_id);
-        }
-        assert_eq!(cases.len(), table.len());
-
-        // Check that they are ordered correctly when iterating.
-        let mut table_iter = table.into_lending_iter();
-        let mut case_iter = cases.iter();
-        while let (Some(item), Some((_, case))) = (table_iter.next(), case_iter.next()) {
-            assert_eq!(*case, item);
-        }
-
-        // The iterator should be exhausted at this point.
-        assert_eq!(0, table_iter.count());
-    }
-
-    use crate::pprof;
-    use lz4_flex::frame::FrameDecoder;
-    use prost::Message;
-    use std::fs::File;
-    use std::io::{copy, Cursor};
-
-    /// Test inserting strings from a real WordPress profile, although it's
-    /// unknown at this point which profiler version generated it. It's a small
-    /// sample. Here we're checking that we don't panic or otherwise fail, and
-    /// that the total number of strings and the number of bytes of those
-    /// strings match the profile.
-    #[test]
-    #[cfg_attr(miri, ignore)] // This test is too slow for miri
-    fn test_wordpress() {
-        // Load up the compressed profile.
-        let compressed_size = 101824_u64;
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/wordpress.pprof.lz4");
-        let mut decoder = FrameDecoder::new(File::open(path).unwrap());
-        let mut bytes = Vec::with_capacity(compressed_size as usize);
-        copy(&mut decoder, &mut bytes).unwrap();
-
-        let pprof = pprof::Profile::decode(&mut Cursor::new(&bytes)).unwrap();
-
-        // Insert all the strings, calculating the correct number of strings
-        // and string bytes.
-        let mut table = StringTable::new();
-        let n_strings = pprof.string_table.len();
-        let mut expected_bytes = 0;
-        for string in &pprof.string_table {
-            expected_bytes += string.len();
+        let n_strings = src.len();
+        for string in src {
             table.intern(string);
         }
         assert_eq!(n_strings, table.len());
 
-        let mut string_iter = table.into_lending_iter();
-        let mut actual_bytes = 0;
-        while let Some(string) = string_iter.next() {
-            actual_bytes += string.len();
+        // Re-inserting doesn't change the size.
+        for string in src {
+            table.intern(string);
         }
-        assert_eq!(expected_bytes, actual_bytes);
+        assert_eq!(n_strings, table.len());
+
+        // Check that they are ordered correctly when iterating.
+        let mut actual_iter = table.into_lending_iter();
+        let mut expected_iter = src.iter();
+        while let (Some(expected), Some(actual)) = (expected_iter.next(), actual_iter.next()) {
+            assert_eq!(*expected, actual);
+        }
+
+        // The iterators should be exhausted at this point.
+        assert_eq!(None, expected_iter.next());
+        assert_eq!(0, actual_iter.count());
+    }
+
+    #[test]
+    fn test_small_set_of_strings() {
+        let cases: &[_] = &[
+            "",
+            "local root span id",
+            "span id",
+            "trace endpoint",
+            "samples",
+            "count",
+            "wall-time",
+            "nanoseconds",
+            "cpu-time",
+            "<?php",
+            "/srv/demo/public/index.php",
+            "pid",
+            "/var/www/public/index.php",
+            "main",
+            "thread id",
+            "A\\Very\\Long\\Php\\Namespace\\Class::method",
+            "/",
+        ];
+        test_from_src(cases);
+    }
+
+    /// Test inserting strings from a real WordPress profile, although it's
+    /// unknown at this point which profiler version generated it. It's a small
+    /// sample. Here we're checking that we don't panic or otherwise fail, and
+    /// that the total number of strings and the bytes of those strings match
+    /// the profile.
+    #[test]
+    fn test_wordpress() {
+        test_from_src(&wordpress_test_data::WORDPRESS_STRINGS);
     }
 }
