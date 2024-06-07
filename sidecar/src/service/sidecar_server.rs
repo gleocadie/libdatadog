@@ -310,7 +310,7 @@ impl SidecarServer {
         }
 
         let payload =
-            trace_utils::collect_trace_chunks(traces, &headers, |_chunk, _root_span_index| {});
+            trace_utils::collect_trace_chunks(traces, &headers, |_chunk, _root_span_index| {}, false);
 
         // send trace payload to our trace flusher
         let data = SendData::new(size, payload, headers, target);

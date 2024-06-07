@@ -222,10 +222,16 @@ impl TraceExporter {
                 },
             ),
             TraceExporterOutputFormat::V07 => {
+                let mut normalize = false;
+                if self.endpoint.api_key.is_some() {
+                    normalize = true;
+                }
+
                 let tracer_payload = trace_utils::collect_trace_chunks(
                     traces,
                     &header_tags,
                     |_chunk, _root_span_index| {},
+                    normalize,
                 );
 
                 let endpoint = Endpoint {

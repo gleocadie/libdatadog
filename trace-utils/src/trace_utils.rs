@@ -288,6 +288,7 @@ pub fn collect_trace_chunks(
     mut traces: Vec<Vec<pb::Span>>,
     tracer_header_tags: &TracerHeaderTags,
     process_chunk: impl Fn(&mut TraceChunk, usize),
+    do_normalize: bool,
 ) -> pb::TracerPayload {
     let mut trace_chunks: Vec<pb::TraceChunk> = Vec::new();
 
@@ -309,8 +310,10 @@ pub fn collect_trace_chunks(
             }
         };
 
-        if let Err(e) = normalizer::normalize_chunk(&mut chunk, root_span_index) {
-            error!("Error normalizing trace chunk: {e}");
+        if do_normalize {
+            if let Err(e) = normalizer::normalize_chunk(&mut chunk, root_span_index) {
+                error!("Error normalizing trace chunk: {e}");
+            }
         }
 
         for span in chunk.spans.iter_mut() {
