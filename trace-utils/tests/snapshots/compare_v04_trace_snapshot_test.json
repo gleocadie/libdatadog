@@ -18,6 +18,9 @@
         "_dd_metric1": 1.0,
         "_dd_metric2": 2.0
       },
+      "meta_struct": {
+        "binary": "large binary data"
+      },
       "type": ""
     },
     {

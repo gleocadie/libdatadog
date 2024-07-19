@@ -38,6 +38,7 @@ mod tracing_integration_tests {
         let mut span_1 = create_test_span(1234, 12342, 12341, 1, false);
         span_1.metrics.insert("_dd_metric1".to_string(), 1.0);
         span_1.metrics.insert("_dd_metric2".to_string(), 2.0);
+        span_1.meta_struct.insert("binary".to_string(), "large binary data".as_bytes().to_vec());
 
         let span_2 = create_test_span(1234, 12343, 12341, 1, false);
 
