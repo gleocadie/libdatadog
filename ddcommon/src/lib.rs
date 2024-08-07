@@ -37,6 +37,7 @@ pub struct Endpoint {
     #[serde(serialize_with = "serialize_uri", deserialize_with = "deserialize_uri")]
     pub url: hyper::Uri,
     pub api_key: Option<Cow<'static, str>>,
+    #[serde(default)]
     pub timeout_ms: u64,
 }
 
