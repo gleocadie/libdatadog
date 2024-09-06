@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::default::Default;
+use std::env;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Add;
@@ -117,6 +118,27 @@ struct RuntimeInfo<N: NotifyTarget> {
     targets: HashMap<Arc<Target>, u32>,
 }
 
+type InProcNotifyFn = extern "C" fn(*const ConfigInvariants, *const Arc<Target>);
+static mut IN_PROC_NOTIFY_FUN: Option<InProcNotifyFn> = None;
+
+#[no_mangle]
+pub extern "C" fn ddog_set_rc_notify_fn(notify_fn: Option<InProcNotifyFn>) {
+    unsafe {
+        IN_PROC_NOTIFY_FUN = notify_fn;
+    }
+}
+
+fn get_default_poll_interval() -> u64 {
+    // TODO: should be passed in rather than read from env
+    const DEFAULT_POLL_INTERVAL: u64 = 5_000;
+
+    let val_millis = match env::var("_DD_DEBUG_SIDECAR_RC_POLL_INTERVAL_MILLIS") {
+        Ok(val) => val.parse().unwrap_or(DEFAULT_POLL_INTERVAL),
+        Err(_) => DEFAULT_POLL_INTERVAL,
+    };
+    val_millis * 1_000_000
+}
+
 impl<N: NotifyTarget + 'static, S: FileStorage + Clone + Sync + Send + 'static>
     MultiTargetFetcher<N, S>
 where
@@ -130,7 +152,7 @@ where
             storage: RefcountingStorage::new(storage, ConfigFetcherState::new(invariants)),
             target_runtimes: Mutex::new(Default::default()),
             runtimes: Mutex::new(Default::default()),
-            remote_config_interval: AtomicU64::new(5_000_000_000),
+            remote_config_interval: AtomicU64::new(get_default_poll_interval()),
             services: Mutex::new(Default::default()),
             pending_async_insertions: AtomicU32::new(0),
             fetcher_semaphore: Semaphore::new(Self::DEFAULT_CLIENTS_LIMIT as usize),
@@ -392,6 +414,7 @@ where
             let (remove_future, remove_completer) = ManualFuture::new();
             let shared_future = remove_future.shared();
 
+            let invariants = this.storage.invariants().clone();
             let inner_fetcher = fetcher.clone();
             let inner_this = this.clone();
             let fetcher_fut = fetcher
@@ -404,6 +427,13 @@ where
                             &inner_fetcher.target,
                             files,
                         );
+
+                        if let Some(in_proc_notify) = unsafe { IN_PROC_NOTIFY_FUN } {
+                            in_proc_notify(
+                                &invariants as *const ConfigInvariants,
+                                &inner_fetcher.target as *const Arc<Target>,
+                            );
+                        }
 
                         if notify {
                             // notify_targets is Hash + Eq + Clone, allowing us to deduplicate. Also

@@ -25,6 +25,8 @@ const ENV_IDLE_LINGER_TIME_SECS: &str = "_DD_DEBUG_SIDECAR_IDLE_LINGER_TIME_SECS
 const DEFAULT_IDLE_LINGER_TIME: Duration = Duration::from_secs(60);
 
 const ENV_SIDECAR_SELF_TELEMETRY: &str = "_DD_SIDECAR_SELF_TELEMETRY";
+const ENV_RC_POLL_INTERVAL_MILLIS: &str = "_DD_DEBUG_SIDECAR_RC_POLL_INTERVAL_MILLIS";
+const DEFAULT_RC_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 const ENV_SIDECAR_APPSEC_SHARED_LIB_PATH: &str = "_DD_SIDECAR_APPSEC_SHARED_LIB_PATH";
 const ENV_SIDECAR_APPSEC_SOCKET_FILE_PATH: &str = "_DD_SIDECAR_APPSEC_SOCKET_FILE_PATH";
@@ -84,6 +86,7 @@ pub struct Config {
     pub log_method: LogMethod,
     pub log_level: String,
     pub idle_linger_time: Duration,
+    pub rc_poll_intval: Duration,
     pub self_telemetry: bool,
     pub library_dependencies: Vec<LibDependency>,
     pub child_env: HashMap<std::ffi::OsString, std::ffi::OsString>,
@@ -115,6 +118,10 @@ impl Config {
             (
                 ENV_SIDECAR_SELF_TELEMETRY,
                 self.self_telemetry.to_string().into(),
+            ),
+            (
+                ENV_RC_POLL_INTERVAL_MILLIS,
+                self.rc_poll_intval.as_millis().to_string().into(),
             ),
         ]);
         if self.appsec_config.is_some() {
@@ -201,6 +208,15 @@ impl FromEnv {
             .unwrap_or(DEFAULT_IDLE_LINGER_TIME)
     }
 
+    fn rc_poll_intval() -> Duration {
+        std::env::var(ENV_RC_POLL_INTERVAL_MILLIS)
+            .unwrap_or_default()
+            .parse()
+            .ok()
+            .map(Duration::from_millis)
+            .unwrap_or(DEFAULT_RC_POLL_INTERVAL)
+    }
+
     fn self_telemetry() -> bool {
         matches!(
             std::env::var(ENV_SIDECAR_SELF_TELEMETRY).as_deref(),
@@ -214,6 +230,7 @@ impl FromEnv {
             log_method: Self::log_method(),
             log_level: Self::log_level(),
             idle_linger_time: Self::idle_linger_time(),
+            rc_poll_intval: Self::rc_poll_intval(),
             self_telemetry: Self::self_telemetry(),
             library_dependencies: vec![],
             child_env: std::env::vars_os().collect(),

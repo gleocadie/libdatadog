@@ -31,7 +31,7 @@ use ddtelemetry_ffi::try_c;
 use dogstatsd_client::DogStatsDActionOwned;
 use ffi::slice::AsBytes;
 use libc::c_char;
-use std::ffi::c_void;
+use std::ffi::{c_void, CStr};
 use std::fs::File;
 #[cfg(unix)]
 use std::os::unix::prelude::FromRawFd;
@@ -228,6 +228,15 @@ pub unsafe extern "C" fn ddog_remote_config_reader_for_endpoint<'a>(
             app_version: app_version.to_utf8_lossy().into(),
         }),
     ))
+}
+
+#[no_mangle]
+pub extern "C" fn ddog_remote_config_reader_for_path(
+    path: *const c_char,
+) -> Box<RemoteConfigReader> {
+    Box::new(RemoteConfigReader::from_path(unsafe {
+        CStr::from_ptr(path)
+    }))
 }
 
 #[no_mangle]

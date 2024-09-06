@@ -502,7 +502,7 @@ impl SpawnWorker {
 
                             libc::execve(path_ptr, argv.as_ptr(), envp.as_ptr());
 
-                            libc::unlink(temp_path.as_ptr() as *const libc::c_char);
+                            // libc::unlink(temp_path.as_ptr() as *const libc::c_char);
                         }
                     }
 
@@ -576,7 +576,7 @@ impl SpawnWorker {
                 Ok(fork) => Ok(fork),
                 Err(e) => {
                     for temp_file in ref_temp_files {
-                        libc::unlink(temp_file.as_ptr());
+                        // libc::unlink(temp_file.as_ptr());
                     }
                     Err(e)
                 }

@@ -21,7 +21,7 @@ use std::cmp::Reverse;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::default::Default;
-use std::ffi::CString;
+use std::ffi::{c_char, CStr, CString};
 use std::hash::{Hash, Hasher};
 use std::io;
 #[cfg(windows)]
@@ -37,24 +37,60 @@ use zwohash::ZwoHasher;
 pub struct RemoteConfigWriter(OneWayShmWriter<NamedShmHandle>);
 pub struct RemoteConfigReader(OneWayShmReader<NamedShmHandle, CString>);
 
+#[no_mangle]
+extern "C" fn debug_dump_inv_tar(id: *const ConfigInvariants, target: *const Arc<Target>) {
+    let id = unsafe { &*id };
+    let target = unsafe { &*target };
+    debug!("ConfigInvariants: {:#?}", id);
+    debug!("Target: {:#?}", target);
+}
+
 fn path_for_remote_config(id: &ConfigInvariants, target: &Arc<Target>) -> CString {
     // We need a stable hash so that the outcome is independent of the process
     let mut hasher = ZwoHasher::default();
     id.hash(&mut hasher);
     target.hash(&mut hasher);
     // datadog remote config, on macos we're restricted to 31 chars
-    CString::new(format!(
+    let res = CString::new(format!(
         "/ddrc{}-{}",
         primary_sidecar_identifier(),
         hasher.finish()
     ))
-    .unwrap()
+    .unwrap();
+    debug_dump_inv_tar(id, target);
+    debug!("Path for remote config: {:?}", res.to_str().unwrap());
+    res
+}
+
+#[no_mangle]
+extern "C" fn ddog_remote_config_path(
+    id: *const ConfigInvariants,
+    target: *const Arc<Target>,
+) -> *mut c_char {
+    let id = unsafe { &*id };
+    let target = unsafe { &*target };
+    path_for_remote_config(id, target).into_raw()
+}
+#[no_mangle]
+extern "C" fn ddog_remote_config_path_free(path: *mut c_char) {
+    drop(unsafe { CString::from_raw(path) });
 }
 
 impl RemoteConfigReader {
     pub fn new(id: &ConfigInvariants, target: &Arc<Target>) -> RemoteConfigReader {
         let path = path_for_remote_config(id, target);
         RemoteConfigReader(OneWayShmReader::new(open_named_shm(&path).ok(), path))
+    }
+
+    pub fn from_path(path: &CStr) -> Self {
+        RemoteConfigReader(OneWayShmReader::new(
+            open_named_shm(path).ok(),
+            CString::new(path.to_bytes()).unwrap(),
+        ))
+    }
+
+    pub fn get_path(&self) -> &CStr {
+        &self.0.extra
     }
 
     pub fn read(&mut self) -> (bool, &[u8]) {
@@ -350,7 +386,7 @@ fn read_config(path: &str) -> anyhow::Result<(RemoteConfigValue, u32)> {
 pub struct RemoteConfigManager {
     invariants: ConfigInvariants,
     active_target: Option<Arc<Target>>,
-    active_reader: Option<RemoteConfigReader>,
+    pub active_reader: Option<RemoteConfigReader>,
     encountered_targets: HashMap<Arc<Target>, (RemoteConfigReader, Vec<String>)>,
     unexpired_targets: PriorityQueue<Arc<Target>, Reverse<Instant>>,
     active_configs: HashMap<String, RemoteConfigPath>,

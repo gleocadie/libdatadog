@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    void *handle = dlopen(library_path, RTLD_LAZY);
+    void *handle = dlopen(library_path, RTLD_LAZY | RTLD_GLOBAL);
     if (!handle) {
       fputs(dlerror(), error_fd());
       return 10;
