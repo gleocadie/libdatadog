@@ -13,6 +13,9 @@ use hyper::http::uri::PathAndQuery;
 use hyper::{Body, Client, Method, Uri};
 use log::error;
 use std::{borrow::Borrow, collections::HashMap, str::FromStr};
+use std::iter::Chain;
+use std::marker::PhantomData;
+use std::sync::Mutex;
 use tokio::runtime::Runtime;
 
 /// TraceExporterInputFormat represents the format of the input traces.
@@ -209,7 +212,7 @@ impl TraceExporter {
                     Err(err) => {
                         self.emit_metric(HealthMetric::Count(STAT_SEND_ERRORS, 1), None);
                         anyhow::bail!("Failed to send traces: {err}")
-                    },
+                    }
                 }
             })
             .or_else(|err| {
@@ -220,18 +223,38 @@ impl TraceExporter {
 
     /// Emit a health metric to dogstatsd
     fn emit_metric(&self, metric: HealthMetric, custom_tags: Option<Vec<Tag>>) {
+        struct WrapIt<'a, 'b: 'a, V: 'b, I: IntoIterator<Item = &'a V>> {
+            it: Mutex<Option<I>>,
+            _p: PhantomData<&'b I>,
+        }
+        impl<'a, 'b, V, I: IntoIterator<Item = &'a V>> WrapIt<'a, 'b, V, I> {
+            pub fn wrap(iter: I) -> Self {
+                WrapIt {
+                    it: Mutex::new(Some(iter)),
+                    _p: PhantomData,
+                }
+            }
+        }
+        impl<'a, 'b, V, I: IntoIterator<Item = &'a V>> IntoIterator for &'b WrapIt<'a, 'b, V, I> {
+            type Item = I::Item;
+            type IntoIter = I::IntoIter;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.it.lock().unwrap().take().unwrap().into_iter()
+            }
+        }
         if let Some(flusher) = &self.dogstatsd {
             if custom_tags.is_some() {
                 match metric {
-                    HealthMetric::Count(name, c) => flusher.send(vec![DogStatsDAction::Count(
+                    HealthMetric::Count(name, c) => flusher.send(&vec![DogStatsDAction::Count(
                         name,
                         c,
-                        &self.common_stats_tags.iter().chain(&custom_tags.unwrap()),
+                        &WrapIt::wrap(self.common_stats_tags.iter().chain(&custom_tags.unwrap())),
                     )]),
                 }
             } else {
                 match metric {
-                    HealthMetric::Count(name, c) => flusher.send(vec![DogStatsDAction::Count(
+                    HealthMetric::Count(name, c) => flusher.send(&vec![DogStatsDAction::Count(
                         name,
                         c,
                         &self.common_stats_tags,
@@ -258,7 +281,10 @@ impl TraceExporter {
             return Ok(String::from("{}"));
         }
 
-        self.emit_metric(HealthMetric::Count(STAT_DESER_TRACES, traces.len() as i64), None);
+        self.emit_metric(
+            HealthMetric::Count(STAT_DESER_TRACES, traces.len() as i64),
+            None,
+        );
 
         let header_tags: TracerHeaderTags<'_> = (&self.tags).into();
 

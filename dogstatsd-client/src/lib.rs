@@ -24,8 +24,6 @@ const QUEUE_SIZE: usize = 32 * 1024;
 /// The `DogStatsDActionRef` enum gathers the metric types that can be sent to the DogStatsD server.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DogStatsDAction<T: AsRef<str>, V: std::ops::Deref>
-where
-    for<'a> &'a <V as std::ops::Deref>::Target: IntoIterator<Item = &'a Tag>,
 {
     // TODO: instead of AsRef<str> we can accept a marker Trait that users of this crate implement
     Count(T, i64, V),
@@ -70,34 +68,34 @@ impl Flusher {
         Ok(())
     }
 
-    pub fn send<T: AsRef<str>, V: std::ops::Deref>(&self, actions: Vec<DogStatsDAction<T, V>>)
+    pub fn send<'a, T: AsRef<str> + 'a, V: std::ops::Deref + 'a>(&self, actions: &'a Vec<DogStatsDAction<T, V>>)
     where
-        for<'a> &'a <V as std::ops::Deref>::Target: IntoIterator<Item = &'a Tag>,
+        &'a <V as std::ops::Deref>::Target: IntoIterator<Item = &'a Tag> + 'a,
     {
         if self.client.is_none() {
             return;
         }
         let client = self.client.as_ref().unwrap();
 
-        for action in actions {
+        for action in actions.iter() {
             if let Err(err) = match action {
-                DogStatsDAction::Count(metric, value, ref tags) => {
-                    let metric_builder = client.count_with_tags(metric.as_ref(), value);
-                    do_send(metric_builder, tags.deref())
+                DogStatsDAction::Count(metric, value, tags) => {
+                    let metric_builder = client.count_with_tags(metric.as_ref(), *value);
+                    do_send(metric_builder, &mut tags.deref().into_iter())
                 }
-                DogStatsDAction::Distribution(metric, value, ref tags) => do_send(
-                    client.distribution_with_tags(metric.as_ref(), value),
-                    tags.deref(),
+                DogStatsDAction::Distribution(metric, value, tags) => do_send(
+                    client.distribution_with_tags(metric.as_ref(), *value),
+                    &mut tags.deref().into_iter(),
                 ),
-                DogStatsDAction::Gauge(metric, value, ref tags) => {
-                    do_send(client.gauge_with_tags(metric.as_ref(), value), tags.deref())
+                DogStatsDAction::Gauge(metric, value, tags) => {
+                    do_send(client.gauge_with_tags(metric.as_ref(), *value), &mut tags.deref().into_iter())
                 }
-                DogStatsDAction::Histogram(metric, value, ref tags) => do_send(
-                    client.histogram_with_tags(metric.as_ref(), value),
-                    tags.deref(),
+                DogStatsDAction::Histogram(metric, value, tags) => do_send(
+                    client.histogram_with_tags(metric.as_ref(), *value),
+                    &mut tags.deref().into_iter(),
                 ),
-                DogStatsDAction::Set(metric, value, ref tags) => {
-                    do_send(client.set_with_tags(metric.as_ref(), value), tags.deref())
+                DogStatsDAction::Set(metric, value, tags) => {
+                    do_send(client.set_with_tags(metric.as_ref(), *value), &mut tags.deref().into_iter())
                 }
             } {
                 error!("Error while sending metric: {}", err);
@@ -106,15 +104,14 @@ impl Flusher {
     }
 }
 
-fn do_send<'m, 't, T, V: IntoIterator<Item = &'t Tag>>(
+fn do_send<'m, 't, T, V: Iterator<Item = &'t Tag> + 't>(
     mut builder: MetricBuilder<'m, '_, T>,
-    tags: V,
+    tags_iter: &mut V,
 ) -> anyhow::Result<()>
 where
     T: Metric + From<String>,
     't: 'm,
 {
-    let mut tags_iter = tags.into_iter();
     let mut tag_opt = tags_iter.next();
     while tag_opt.is_some() {
         builder = builder.with_tag_value(tag_opt.unwrap().as_ref());
@@ -185,7 +182,7 @@ mod test {
         _ = flusher.set_endpoint(Endpoint::from_slice(
             socket.local_addr().unwrap().to_string().as_str(),
         ));
-        flusher.send(vec![
+        flusher.send(&vec![
             Count("test_count", 3, vec![tag!("foo", "bar")]),
             Count("test_neg_count", -2, vec![]),
             Distribution("test_distribution", 4.2, vec![]),

@@ -850,7 +850,7 @@ impl SidecarInterface for SidecarServer {
         tokio::spawn(async move {
             self.get_session(&instance_id.session_id)
                 .get_dogstatsd()
-                .send(actions);
+                .send(&actions);
         });
 
         no_response()
