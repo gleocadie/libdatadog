@@ -124,13 +124,12 @@ impl Aggregator {
             .unwrap_or_default();
         let mut sketch_payload = SketchPayload::new();
 
-        self.map
+        sketch_payload.sketches = self.map
             .iter()
             .filter_map(|entry| match entry.value {
                 MetricValue::Distribution(_) => build_sketch(now, entry, &self.tags),
                 _ => None,
-            })
-            .for_each(|sketch| sketch_payload.sketches.push(sketch));
+            }).collect();
         sketch_payload
     }
 
