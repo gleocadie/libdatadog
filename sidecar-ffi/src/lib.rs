@@ -743,6 +743,20 @@ pub unsafe extern "C" fn ddog_sidecar_stats(
     ffi::CharSlice::from_raw_parts(malloced as *mut c_char, size)
 }
 
+/// Retrieves the current lsan dump of the sidecar.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ddog_sidecar_lsan_stats(
+    transport: &mut Box<SidecarTransport>,
+) -> ffi::CharSlice {
+    let str = blocking::lsan_stats(transport).unwrap_or_else(|e| format!("{:?}", e));
+    let size = str.len();
+    let malloced = libc::malloc(size) as *mut u8;
+    let buf = slice::from_raw_parts_mut(malloced, size);
+    buf.copy_from_slice(str.as_bytes());
+    ffi::CharSlice::from_raw_parts(malloced as *mut c_char, size)
+}
+
 /// Send a DogStatsD "count" metric.
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]

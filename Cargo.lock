@@ -1661,6 +1661,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "manual_future",
+ "memfd",
  "memory-stats",
  "microseh",
  "nix 0.27.1",

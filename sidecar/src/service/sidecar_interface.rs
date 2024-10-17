@@ -190,4 +190,11 @@ pub trait SidecarInterface {
     ///
     /// A string representation of the current statistics of the service.
     async fn stats() -> String;
+
+    /// Dumps memory statistics in LSAN builds.
+    ///
+    /// # Returns
+    ///
+    /// A string with a raw lsan output dump.
+    async fn lsan_stats() -> String;
 }

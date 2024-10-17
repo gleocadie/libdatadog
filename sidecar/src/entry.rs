@@ -180,7 +180,7 @@ pub fn daemonize(listener: IpcServer, mut cfg: Config) -> anyhow::Result<()> {
     for (env, val) in cfg.to_env().into_iter() {
         spawn_cfg.append_env(env, val);
     }
-    spawn_cfg.append_env("LSAN_OPTIONS", "detect_leaks=0");
+    spawn_cfg.append_env("LSAN_OPTIONS", "fast_unwind_on_malloc=0:use_tls=0:use_globals=0:use_stacks=0:use_registers=0:use_root_regions=0:use_ld_allocations=0:leak_check_at_exit=0:log_pointers=1:log_threads=1");
 
     setup_daemon_process(listener, &mut spawn_cfg)?;
 

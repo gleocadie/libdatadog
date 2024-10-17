@@ -28,6 +28,10 @@ use manual_future::{ManualFuture, ManualFutureCompleter};
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+#[cfg(all(feature = "lsan", target_os = "linux"))]
+use std::io::Read;
+#[cfg(all(feature = "lsan", target_os = "linux"))]
+use std::os::fd::AsRawFd;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -991,6 +995,36 @@ impl SidecarInterface for SidecarServer {
             let stats = self.compute_stats().await;
             simd_json::serde::to_string(&stats).expect("unable to serialize stats to string")
         })
+    }
+
+    type LsanStatsFut = Ready<String>;
+
+    fn lsan_stats(self, _: Context) -> Self::LsanStatsFut {
+        #[cfg(all(feature = "lsan", target_os = "linux"))]
+        {
+            extern "C" {
+                fn __lsan_do_recoverable_leak_check();
+            }
+
+            match memfd::MemfdOptions::new().create("lsan_output") {
+                Ok(memfd) => {
+                    unsafe {
+                        let stderr_fd = libc::dup(2);
+                        libc::dup2(memfd.as_raw_fd(), 2);
+                        __lsan_do_recoverable_leak_check();
+                        libc::dup2(stderr_fd, 2);
+                        libc::close(stderr_fd);
+                        libc::lseek(memfd.as_raw_fd(), 0, libc::SEEK_SET);
+                    }
+                    let mut out = vec![b'w'];
+                    _ = memfd.into_file().read_to_end(&mut out);
+                    future::ready(String::from_utf8_lossy(out.as_slice()).to_string())
+                }
+                Err(e) => future::ready(e.to_string()),
+            }
+        }
+        #[cfg(not(all(feature = "lsan", target_os = "linux")))]
+        future::ready("".to_string())
     }
 }
 

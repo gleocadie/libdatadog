@@ -478,6 +478,24 @@ pub fn stats(transport: &mut SidecarTransport) -> io::Result<String> {
     }
 }
 
+/// Dumps memory statistics in LSAN builds.
+///
+/// # Arguments
+///
+/// * `transport` - The transport used for communication.
+///
+/// # Returns
+///
+/// An `io::Result<String>` with the raw lsan output dump.
+pub fn lsan_stats(transport: &mut SidecarTransport) -> io::Result<String> {
+    let res = transport.call(SidecarInterfaceRequest::LsanStats {})?;
+    if let SidecarInterfaceResponse::LsanStats(stats) = res {
+        Ok(stats)
+    } else {
+        Ok(String::default())
+    }
+}
+
 /// Flushes the outstanding traces.
 ///
 /// # Arguments
