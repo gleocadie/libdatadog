@@ -154,6 +154,9 @@ impl EnvVerifier for ServerlessEnvVerifier {
             trace_utils::EnvironmentType::LambdaFunction => {
                 trace_utils::MiniAgentMetadata::default()
             }
+            trace_utils::EnvironmentType::AWSGlue => {
+                trace_utils::MiniAgentMetadata::default()
+            }
         }
     }
 }

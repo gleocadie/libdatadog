@@ -29,6 +29,10 @@ pub fn read_cloud_env() -> Option<(String, trace_utils::EnvironmentType)> {
         // Set by Azure Spring Apps
         return Some((res, trace_utils::EnvironmentType::AzureSpringApp));
     }
+    if let Ok(res) = env::var("GLUE_VERSION") {
+        // Set by AWS Glue
+        return Some((res, trace_utils::EnvironmentType::AWSGlue));
+    }
     None
 }
 

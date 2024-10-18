@@ -444,6 +444,7 @@ pub fn set_serverless_root_span_tags(
         EnvironmentType::AzureFunction => "azurefunction",
         EnvironmentType::AzureSpringApp => "azurespringapp",
         EnvironmentType::LambdaFunction => "lambda", // historical reasons
+        EnvironmentType::AWSGlue => "awsglue",
     };
     span.meta
         .insert("_dd.origin".to_string(), origin_tag.to_string());
@@ -474,6 +475,7 @@ pub enum EnvironmentType {
     AzureFunction,
     AzureSpringApp,
     LambdaFunction,
+    AWSGlue,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
