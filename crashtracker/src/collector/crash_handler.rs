@@ -5,6 +5,7 @@
 #![allow(deprecated)]
 
 use super::emitters::emit_crashreport;
+use super::fork_without_atfork::fork_without_atfork;
 use super::saguard::SaGuard;
 use crate::crash_info::CrashtrackerMetadata;
 use crate::shared::configuration::{CrashtrackerConfiguration, CrashtrackerReceiverConfig};
@@ -182,12 +183,6 @@ fn run_receiver_child(uds_parent: RawFd, uds_child: RawFd, stderr: RawFd, stdout
         )
     };
 
-    // Print the first string in the environment variables to stderr
-    // This is a way to check that the environment variables are being passed correctly
-    println!("Crashtracker receiver environment variable: {:?}", unsafe {
-        CString::from_raw(*env_vars_ptrs.first().unwrap() as *mut i8)
-    });
-
     // Change into the crashtracking receiver
     unsafe {
         execve(
@@ -252,22 +247,39 @@ fn make_receiver(config: &CrashtrackerReceiverConfig) -> anyhow::Result<Receiver
     .context("Failed to create Unix domain socket pair")
     .map(|(a, b)| (a.into_raw_fd(), b.into_raw_fd()))?;
 
-    // We need to spawn a process without calling atfork handlers, since this is happening inside
-    // of a signal handler.  Moreover, preference is given to multiplatform-uniform solutions.
-    // Although `vfork()` is deprecated, the alternatives have limitations
-    // * `fork()` calls atfork handlers
-    // * There is no guarantee that `posix_spawn()` will not call `fork()` internally
-    // * `clone()`/`clone3()` are Linux-specific
-    // Accordingly, use `vfork()` for now
-    // NB -- on macos the underlying implementation here is actually `fork()`!  See the top of this
-    // file for details.
-    match unsafe { vfork() } {
+    // We're about to create a child process, but the child process may do some setup operations
+    // and we need to wait until it is ready--but we can't wait forever.  We create a _second_
+    // socketpair, but the only purpose of this is to poll for `POLLHUP` because `CLOEXEC` will
+    // guarantee that the `execve()` in the child will close this fd.  In short, we're using a
+    // socket pair as a synchronization primitive.
+    let (sync_parent, _) = socket::socketpair(
+        socket::AddressFamily::Unix,
+        socket::SockType::Stream,
+        None,
+        socket::SockFlag::SOCK_CLOEXEC,
+    )?;
+
+    // Now we spawn the child process.  NB that a valid solution _must_ suppress the use of atfork
+    // handlers.  See the implementation in `fork_without_atfork` for details.
+    match fork_without_atfork() {
         0 => {
             // Child (noreturn)
+            // We don't do anything special with the socketpair we just made, since everything we
+            // need to do will be handled by `exec()`.
             run_receiver_child(uds_parent, uds_child, stderr, stdout)
         }
         pid if pid > 0 => {
             // Parent
+            // Before we do normal receiver things, pollhup on the sync socket.  NB that we wait
+            // for a hardcoded 250 ms because this is a modestly large number that shouldn't
+            // interfere with the config-level timeout, since we don't do anything here to subtract
+            // from that other timeout value.
+            // The file descriptors will naturally close at the return of this function, and there
+            // isn't a particularly pressing need to eliminate them, so just leave them alone.
+            let _ = wait_for_pollhup(sync_parent.into_raw_fd(), 250)
+                .context("Failed to wait for pollhup on sync socket")?;
+
+            // Normal receiver part
             run_receiver_parent(uds_parent, uds_child, stderr, stdout);
             Ok(Receiver {
                 receiver_uds: uds_parent,
