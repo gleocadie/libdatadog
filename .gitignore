@@ -22,3 +22,6 @@ __fuzz__
 Cargo.lock # this is ignored so you don't update by accident, but is committed.
 docker-sync.yml
 
+tests/nuget_package/bin
+tests/nuget_package/obj
+windows/obj
