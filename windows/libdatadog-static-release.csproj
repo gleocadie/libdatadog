@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <id>libdatadog</id>
+    <Company>Datadog</Company>
+    <Authors>Datadog</Authors>
+    <Title>Datadog libdatadog</Title>
+    <Version>$(LibdatadogVersion)</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageProjectUrl>https://github.com/DataDog/libdatadog</PackageProjectUrl>
+    <Description>libdatadog provides a static library containing common code used in the
+      implementation of Datadog's libraries, including Datadog Continuous Profilers</Description>
+    <PackageReleaseNotes>Release of libdatadog</PackageReleaseNotes>
+    <Copyright>Copyright 2022 Datadog, Inc.</Copyright>
+    <PackageTags>Datadog;native;</PackageTags>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- NuGet packages -->
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="libdatadog-static.props" Pack="true" PackagePath="build\native\libdatadog-static.props" />
+
+    <None Include="$(LibDatadogBinariesOutputDir)\common.h" Pack="true"
+      PackagePath="include\native\datadog\common.h" />
+    <None Include="$(LibDatadogBinariesOutputDir)\profiling.h" Pack="true"
+      PackagePath="include\native\datadog\profiling.h" />
+    <None Include="$(LibDatadogBinariesOutputDir)\telemetry.h" Pack="true"
+      PackagePath="include\native\datadog\telemetry.h" />
+    <None Include="$(LibDatadogBinariesOutputDir)\crashtracker.h" Pack="true"
+      PackagePath="include\native\datadog\crashtracker.h" />
+    <None Include="$(LibDatadogBinariesOutputDir)\data-pipeline.h" Pack="true"
+      PackagePath="include\native\datadog\data-pipeline.h" />
+
+    <None Include="$(LibDatadogBinariesOutputDir)\x86_64-pc-windows-msvc\release\datadog_profiling_ffi.lib"
+      Pack="true" PackagePath="build\native\lib\x64\release\static\datadog_profiling_ffi.lib" />
+
+    <None Include="$(LibDatadogBinariesOutputDir)\i686-pc-windows-msvc\release\datadog_profiling_ffi.lib"
+      Pack="true" PackagePath="build\native\lib\x86\release\static\datadog_profiling_ffi.lib" />
+  </ItemGroup>
+</Project>

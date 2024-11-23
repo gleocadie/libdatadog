@@ -41,13 +41,7 @@
     <None Include="$(LibDatadogBinariesOutputDir)\x86_64-pc-windows-msvc\debug\datadog_profiling_ffi.lib"
       Pack="true" PackagePath="build\native\lib\x64\debug\static\datadog_profiling_ffi.lib" />
 
-    <None Include="$(LibDatadogBinariesOutputDir)\x86_64-pc-windows-msvc\release\datadog_profiling_ffi.lib"
-      Pack="true" PackagePath="build\native\lib\x64\release\static\datadog_profiling_ffi.lib" />
-
     <None Include="$(LibDatadogBinariesOutputDir)\i686-pc-windows-msvc\debug\datadog_profiling_ffi.lib"
       Pack="true" PackagePath="build\native\lib\x86\debug\static\datadog_profiling_ffi.lib" />
-
-    <None Include="$(LibDatadogBinariesOutputDir)\i686-pc-windows-msvc\release\datadog_profiling_ffi.lib"
-      Pack="true" PackagePath="build\native\lib\x86\release\static\datadog_profiling_ffi.lib" />
   </ItemGroup>
 </Project>
