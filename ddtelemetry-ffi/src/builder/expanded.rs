@@ -851,7 +851,6 @@ mod macros {
         property: TelemetryWorkerBuilderEndpointProperty,
         param: &Endpoint,
     ) -> ffi::MaybeError {
-        use ddcommon_net1::Endpoint;
         use TelemetryWorkerBuilderEndpointProperty::*;
         match property {
             ConfigEndpoint => {
