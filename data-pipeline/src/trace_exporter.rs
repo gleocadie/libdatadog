@@ -21,6 +21,7 @@ use log::{error, info};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{borrow::Borrow, collections::HashMap, str::FromStr, time};
+use tinybytes::UnderlyingBytes;
 use tokio::{runtime::Runtime, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
@@ -253,12 +254,15 @@ impl TraceExporter {
 
     /// Send msgpack serialized traces to the agent
     #[allow(missing_docs)]
-    pub fn send(&self, data: tinybytes::Bytes, trace_count: usize) -> Result<String, String> {
+    pub fn send<T>(&self, data: T, trace_count: usize) -> Result<String, String>
+    where
+        T: UnderlyingBytes,
+    {
         self.check_agent_info();
         match self.input_format {
             TraceExporterInputFormat::Proxy => self.send_proxy(data.as_ref(), trace_count),
             TraceExporterInputFormat::V04 => {
-                self.send_deser_ser(data)
+                self.send_deser_ser(tinybytes::Bytes::from(data))
                 // TODO: APMSP-1582 - Refactor data-pipeline-ffi so we can leverage a type that
                 // implements tinybytes::UnderlyingBytes trait to avoid copying
             }
@@ -1186,7 +1190,7 @@ mod tests {
         }];
 
         let data = rmp_serde::to_vec_named(&vec![trace_chunk]).unwrap();
-        
+
         // Wait for the info fetcher to get the config
         while mock_info.hits() == 0 {
             exporter.runtime.block_on(async {
@@ -1194,7 +1198,7 @@ mod tests {
             })
         }
 
-        exporter.send(tinybytes::Bytes::from(data), 1).unwrap();
+        exporter.send(data, 1).unwrap();
         exporter.shutdown(None).unwrap();
 
         mock_traces.assert();
@@ -1313,7 +1317,7 @@ mod tests {
             }],
         ];
         let bytes = rmp_serde::to_vec_named(&traces).expect("failed to serialize static trace");
-        let _result = exporter.send(tinybytes::Bytes::from(bytes), 1).expect("failed to send trace");
+        let _result = exporter.send(bytes, 1).expect("failed to send trace");
 
         assert_eq!(
             &format!(
@@ -1343,12 +1347,11 @@ mod tests {
             fake_agent.url("/v0.4/traces"),
             stats_socket.local_addr().unwrap().to_string(),
         );
-        
-        let bad_payload = tinybytes::Bytes::copy_from_slice(b"some_bad_payload".as_ref());
-        
-        let _result = exporter
-            .send(bad_payload, 1)
-            .expect("failed to send trace");
+
+        // let bad_payload = tinybytes::Bytes::copy_from_slice(b"some_bad_payload".as_ref());
+        let bad_payload = b"some_bad_payload".to_vec();
+
+        let _result = exporter.send(bad_payload, 1).expect("failed to send trace");
 
         assert_eq!(
             &format!(
@@ -1382,7 +1385,7 @@ mod tests {
             ..Default::default()
         }]];
         let bytes = rmp_serde::to_vec_named(&traces).expect("failed to serialize static trace");
-        let _result = exporter.send(tinybytes::Bytes::from(bytes), 1).expect("failed to send trace");
+        let _result = exporter.send(bytes, 1).expect("failed to send trace");
 
         assert_eq!(
             &format!(
