@@ -1303,6 +1303,7 @@ dependencies = [
  "datadog-trace-protobuf",
  "datadog-trace-utils",
  "ddcommon",
+ "ddcommon-ffi",
  "dogstatsd-client",
  "either",
  "futures",
@@ -1328,7 +1329,6 @@ dependencies = [
  "data-pipeline",
  "ddcommon-ffi",
  "libc",
- "tinybytes",
 ]
 
 [[package]]

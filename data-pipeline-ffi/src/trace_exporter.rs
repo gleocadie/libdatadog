@@ -107,15 +107,14 @@ pub unsafe extern "C" fn ddog_trace_exporter_free(handle: Box<TraceExporter>) {
 #[no_mangle]
 pub unsafe extern "C" fn ddog_trace_exporter_send(
     handle: &TraceExporter,
-    trace: ByteSlice,
+    buf: *mut u8,
+    len: usize,
     trace_count: usize,
 ) -> MaybeError {
     // TODO - handle errors - https://datadoghq.atlassian.net/browse/APMSP-1095
-    let static_trace: ByteSlice<'static> = std::mem::transmute(trace);
-    let tinybytes_trace = tinybytes::Bytes::from(static_trace);
 
     handle
-        .send(tinybytes_trace, trace_count)
+        .send(std::slice::from_raw_parts(buf, len), trace_count)
         .unwrap_or(String::from(""));
     MaybeError::None
 }

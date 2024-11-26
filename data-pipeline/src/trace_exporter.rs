@@ -12,6 +12,7 @@ use datadog_trace_utils::tracer_payload::TraceCollection;
 use datadog_trace_utils::{msgpack_decoder, tracer_payload};
 use ddcommon::tag::Tag;
 use ddcommon::{connector, tag, Endpoint};
+use ddcommon_ffi::slice::ByteSlice;
 use dogstatsd_client::{new_flusher, Client, DogStatsDAction};
 use either::Either;
 use hyper::body::HttpBody;
@@ -250,12 +251,14 @@ impl TraceExporter {
 
     /// Send msgpack serialized traces to the agent
     #[allow(missing_docs)]
-    pub fn send(&self, data: tinybytes::Bytes, trace_count: usize) -> Result<String, String> {
+    pub fn send(&self, data: &[u8], trace_count: usize) -> Result<String, String> {
         self.check_agent_info();
+        let bytes = unsafe { ByteSlice::from_raw_parts(data.as_ptr(), data.len())};
+        let tinybytes_trace = tinybytes::Bytes::from(bytes);
         match self.input_format {
-            TraceExporterInputFormat::Proxy => self.send_proxy(data.as_ref(), trace_count),
+            TraceExporterInputFormat::Proxy => self.send_proxy(tinybytes_trace.as_ref(), trace_count),
             TraceExporterInputFormat::V04 => {
-                self.send_deser_ser(data)
+                self.send_deser_ser(tinybytes_trace)
                 // TODO: APMSP-1582 - Refactor data-pipeline-ffi so we can leverage a type that
                 // implements tinybytes::UnderlyingBytes trait to avoid copying
                 // self.send_deser_ser(tinybytes::Bytes::copy_from_slice(data))
