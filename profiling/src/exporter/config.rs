@@ -11,7 +11,7 @@ use ddcommon_net1::Endpoint;
 use ddcommon_net1::connector::uds;
 
 #[cfg(windows)]
-use ddcommon::connector::named_pipe;
+use ddcommon_net1::connector::named_pipe;
 
 /// Creates an Endpoint for talking to the Datadog agent.
 ///
