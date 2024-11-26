@@ -1838,7 +1838,7 @@ dependencies = [
 
 [[package]]
 name = "ddcommon-net1"
-version = "14.3.0"
+version = "14.3.1"
 dependencies = [
  "anyhow",
  "ddcommon",
