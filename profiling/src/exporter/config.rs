@@ -26,6 +26,7 @@ impl EndpointExt for Endpoint {
         site: impl AsRef<str>,
         api_key: impl Into<Cow<'static, str>>,
     ) -> http::Result<Endpoint> {
+        todo!("debugging windows");
         let intake_url = format!("https://intake.profile.{}/api/v2/profile", site.as_ref());
         Ok(Self {
             url: Uri::try_from(intake_url)?,
@@ -39,6 +40,7 @@ impl EndpointExt for Endpoint {
     where
         http::Error: From<U::Error>,
     {
+        todo!("debugging windows");
         let mut parts = uri.try_into()?.into_parts();
         parts.path_and_query = Some(http::uri::PathAndQuery::from_str("/profiling/v1/input")?);
         let url = Uri::from_parts(parts)?;
@@ -51,6 +53,7 @@ impl EndpointExt for Endpoint {
     }
 
     fn profiling_file(path: impl AsRef<str>) -> http::Result<Endpoint> {
+        todo!("debugging windows");
         let raw_url = format!("file://{}", path.as_ref());
         let url = Uri::from_str(&raw_url)?;
         Ok(Self::from(url))
@@ -61,6 +64,7 @@ impl EndpointExt for Endpoint {
 /// Creates a new Uri, with the `unix` scheme, and the path to the socket
 /// encoded as a hex string, to prevent special characters in the url authority
 pub fn try_socket_path_to_uri(path: &Path) -> http::Result<Uri> {
+    todo!("debugging windows");
     Uri::from_path("unix", path)
 }
 
@@ -76,5 +80,6 @@ pub fn try_socket_path_to_uri(path: &Path) -> http::Result<Uri> {
 /// Build a URI from a Path representing a named pipe
 /// `path` - named pipe path. ex: \\.\pipe\pipename
 pub fn try_named_pipe_path_to_uri(path: &Path) -> http::Result<Uri> {
+    todo!("debugging windows");
     Uri::from_path("windows", path)
 }
