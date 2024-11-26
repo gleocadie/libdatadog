@@ -3,6 +3,8 @@
 
 use std::process::Command;
 
+use std::ffi::OsStr;
+
 pub const NATIVE_LIBS: &str =
     " -framework Security -framework CoreFoundation -liconv -lSystem -lresolv -lc -lm -liconv";
 pub const PROF_DYNAMIC_LIB: &str = "libdatadog_profiling.dylib";
@@ -11,6 +13,7 @@ pub const PROF_DYNAMIC_LIB_FFI: &str = "libdatadog_profiling_ffi.dylib";
 pub const PROF_STATIC_LIB_FFI: &str = "libdatadog_profiling_ffi.a";
 pub const REMOVE_RPATH: bool = true;
 pub const BUILD_CRASHTRACKER: bool = true;
+pub const RUSTFLAGS: [&str; 2] = ["-C", "relocation-model=pic"];
 
 #[allow(clippy::zombie_processes)]
 pub fn fix_rpath(lib_path: &str) {
@@ -38,3 +41,5 @@ pub fn strip_libraries(lib_path: &str) {
 }
 
 pub fn fix_soname(_lib_path: &str) {}
+
+pub fn add_additional_files(_lib_path: &str, _target_path: &OsStr) {}

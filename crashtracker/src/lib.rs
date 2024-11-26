@@ -49,6 +49,11 @@ mod collector;
 mod crash_info;
 #[cfg(all(unix, feature = "receiver"))]
 mod receiver;
+
+// TODO: For now, we have name conflicts with the `crash_info` module.
+// Once that module is removed, those conflicts will go away
+// Till then, keep things in two name spaces
+pub mod rfc5_crash_info;
 #[cfg(all(unix, any(feature = "collector", feature = "receiver")))]
 mod shared;
 

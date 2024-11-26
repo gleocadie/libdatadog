@@ -1,19 +1,15 @@
 // Copyright 2024-Present Datadog, Inc. https://www.datadoghq.com/
 // SPDX-License-Identifier: Apache-2.0
 use crate::agent_info::{AgentInfoArc, AgentInfoFetcher};
-use crate::stats_exporter::LibraryMetadata;
 use crate::{
     health_metrics, health_metrics::HealthMetric, span_concentrator::SpanConcentrator,
     stats_exporter,
 };
 use arc_swap::{ArcSwap, ArcSwapOption};
 use bytes::Bytes;
-use datadog_trace_protobuf::pb;
-use datadog_trace_utils::trace_utils::{
-    self, compute_top_level_span, has_top_level, SendData, TracerHeaderTags,
-};
-use datadog_trace_utils::tracer_payload;
+use datadog_trace_utils::trace_utils::{self, SendData, TracerHeaderTags};
 use datadog_trace_utils::tracer_payload::TraceCollection;
+use datadog_trace_utils::{msgpack_decoder, tracer_payload};
 use ddcommon::tag::Tag;
 use ddcommon::{connector, tag, Endpoint};
 use dogstatsd_client::{new_flusher, Client, DogStatsDAction};
@@ -33,8 +29,11 @@ const STATS_ENDPOINT: &str = "/v0.6/stats";
 const INFO_ENDPOINT: &str = "/info";
 
 // Keys used for sampling
+#[allow(dead_code)] // TODO (APMSP-1583) these will be used with client side stats
 const SAMPLING_PRIORITY_KEY: &str = "_sampling_priority_v1";
+#[allow(dead_code)] // TODO (APMSP-1584) these will be used with client side stats
 const SAMPLING_SINGLE_SPAN_MECHANISM: &str = "_dd.span_sampling.mechanism";
+#[allow(dead_code)] // TODO (APMSP-1584) these will be used with client side stats
 const SAMPLING_ANALYTICS_RATE_KEY: &str = "_dd1.sr.eausr";
 
 /// TraceExporterInputFormat represents the format of the input traces.
@@ -100,12 +99,13 @@ fn add_path(url: &Uri, path: &str) -> Uri {
     Uri::from_parts(parts).unwrap()
 }
 
+/* TODO (APMSP-1583) re-enable client side stats
 struct DroppedP0Counts {
     pub dropped_p0_traces: usize,
     pub dropped_p0_spans: usize,
 }
 
-/// Remove spans and chunks only keeping the ones that may be sampled by the agent
+Remove spans and chunks only keeping the ones that may be sampled by the agent
 fn drop_chunks(traces: &mut Vec<Vec<pb::Span>>) -> DroppedP0Counts {
     let mut dropped_p0_traces = 0;
     let mut dropped_p0_spans = 0;
@@ -120,8 +120,8 @@ fn drop_chunks(traces: &mut Vec<Vec<pb::Span>>) -> DroppedP0Counts {
             }
             // PrioritySampler and NoPrioritySampler
             let priority = span.metrics.get(SAMPLING_PRIORITY_KEY);
-            if has_top_level(span) && (priority.is_none() || priority.is_some_and(|p| *p > 0.0)) {
-                // We send chunks with positive priority or no priority
+            if has_top_level(span) && (priority.is_none() || priority.is_some_and(|p| *p > 0.0))
+{                 // We send chunks with positive priority or no priority
                 return true;
             }
             // SingleSpanSampler and AnalyzedSpansSampler
@@ -153,20 +153,23 @@ fn drop_chunks(traces: &mut Vec<Vec<pb::Span>>) -> DroppedP0Counts {
         dropped_p0_spans,
     }
 }
+ */
 
-#[derive(Clone, Default)]
-struct TracerMetadata {
-    hostname: String,
-    env: String,
-    version: String,
-    runtime_id: String,
-    service: String,
-    tracer_version: String,
-    language: String,
-    language_version: String,
-    language_interpreter: String,
-    client_computed_stats: bool,
-    client_computed_top_level: bool,
+#[derive(Clone, Default, Debug)]
+pub struct TracerMetadata {
+    pub hostname: String,
+    pub env: String,
+    pub app_version: String,
+    pub runtime_id: String,
+    pub service: String,
+    pub tracer_version: String,
+    pub language: String,
+    pub language_version: String,
+    pub language_interpreter: String,
+    pub language_interpreter_vendor: String,
+    pub git_commit_sha: String,
+    pub client_computed_stats: bool,
+    pub client_computed_top_level: bool,
 }
 
 impl<'a> From<&'a TracerMetadata> for TracerHeaderTags<'a> {
@@ -176,6 +179,7 @@ impl<'a> From<&'a TracerMetadata> for TracerHeaderTags<'a> {
             lang_version: &tags.language_version,
             tracer_version: &tags.tracer_version,
             lang_interpreter: &tags.language_interpreter,
+            lang_vendor: &tags.language_interpreter_vendor,
             client_computed_stats: tags.client_computed_stats,
             client_computed_top_level: tags.client_computed_top_level,
             ..Default::default()
@@ -186,23 +190,6 @@ impl<'a> From<&'a TracerMetadata> for TracerHeaderTags<'a> {
 impl<'a> From<&'a TracerMetadata> for HashMap<&'static str, String> {
     fn from(tags: &'a TracerMetadata) -> HashMap<&'static str, String> {
         TracerHeaderTags::from(tags).into()
-    }
-}
-
-impl From<&TracerMetadata> for LibraryMetadata {
-    fn from(tags: &TracerMetadata) -> Self {
-        LibraryMetadata {
-            hostname: tags.hostname.clone(),
-            lang: tags.language.clone(),
-            env: tags.env.clone(),
-            version: tags.version.clone(),
-            tracer_version: tags.tracer_version.clone(),
-            runtime_id: tags.runtime_id.clone(),
-            service: tags.service.clone(),
-            git_commit_sha: String::new(),
-            container_id: String::new(),
-            tags: Vec::new(),
-        }
     }
 }
 
@@ -251,6 +238,7 @@ pub struct TraceExporter {
     /// None if dogstatsd is disabled
     dogstatsd: Option<Client>,
     common_stats_tags: Vec<Tag>,
+    #[allow(dead_code)]
     client_computed_top_level: bool,
     client_side_stats: ArcSwap<StatsComputationStatus>,
     agent_info: AgentInfoArc,
@@ -269,7 +257,11 @@ impl TraceExporter {
         self.check_agent_info();
         match self.input_format {
             TraceExporterInputFormat::Proxy => self.send_proxy(data, trace_count),
-            TraceExporterInputFormat::V04 => self.send_deser_ser(data),
+            TraceExporterInputFormat::V04 => {
+                self.send_deser_ser(tinybytes::Bytes::copy_from_slice(data))
+                // TODO: APMSP-1582 - Refactor data-pipeline-ffi so we can leverage a type that
+                // implements tinybytes::UnderlyingBytes trait to avoid copying
+            }
         }
     }
 
@@ -338,7 +330,7 @@ impl TraceExporter {
             let mut stats_exporter = stats_exporter::StatsExporter::new(
                 bucket_size,
                 stats_concentrator.clone(),
-                self.metadata.borrow().into(),
+                self.metadata.clone(),
                 Endpoint::from_url(add_path(&self.endpoint.url, STATS_ENDPOINT)),
                 cancellation_token.clone(),
             );
@@ -559,27 +551,27 @@ impl TraceExporter {
         }
     }
 
-    /// Add all spans from the given iterator into the stats concentrator
-    /// # Panic
-    /// Will panic if another thread panicked will holding the lock on `stats_concentrator`
-    fn add_spans_to_stats<'a>(&self, spans: impl Iterator<Item = &'a pb::Span>) {
-        if let StatsComputationStatus::Enabled {
-            stats_concentrator,
-            cancellation_token: _,
-            exporter_handle: _,
-        } = &**self.client_side_stats.load()
-        {
-            let mut stats_concentrator = stats_concentrator.lock().unwrap();
-            for span in spans {
-                stats_concentrator.add_span(span);
-            }
-        }
-    }
+    // /// Add all spans from the given iterator into the stats concentrator
+    // /// # Panic
+    // /// Will panic if another thread panicked will holding the lock on `stats_concentrator`
+    // fn add_spans_to_stats<'a>(&self, spans: impl Iterator<Item = &'a pb::Span>) {
+    //     if let StatsComputationStatus::Enabled {
+    //         stats_concentrator,
+    //         cancellation_token: _,
+    //         exporter_handle: _,
+    //     } = &**self.client_side_stats.load()
+    //     {
+    //         let mut stats_concentrator = stats_concentrator.lock().unwrap();
+    //         for span in spans {
+    //             stats_concentrator.add_span(span);
+    //         }
+    //     }
+    // }
 
-    fn send_deser_ser(&self, data: &[u8]) -> Result<String, String> {
-        let size = data.len();
+    fn send_deser_ser(&self, data: tinybytes::Bytes) -> Result<String, String> {
+        // let size = data.len();
         // TODO base on input format
-        let mut traces: Vec<Vec<pb::Span>> = match rmp_serde::from_slice(data) {
+        let (traces, size) = match msgpack_decoder::v04::decoder::from_slice(data) {
             Ok(res) => res,
             Err(err) => {
                 error!("Error deserializing trace from request body: {err}");
@@ -596,74 +588,73 @@ impl TraceExporter {
             return Ok(String::from("{}"));
         }
 
+        let num_traces = traces.len();
+
         self.emit_metric(
             HealthMetric::Count(health_metrics::STAT_DESER_TRACES, traces.len() as i64),
             None,
         );
 
-        let mut header_tags: TracerHeaderTags = self.metadata.borrow().into();
+        let header_tags: TracerHeaderTags = self.metadata.borrow().into();
 
         // Stats computation
-        if let StatsComputationStatus::Enabled { .. } = &**self.client_side_stats.load() {
-            if !self.client_computed_top_level {
-                for chunk in traces.iter_mut() {
-                    compute_top_level_span(chunk);
-                }
-            }
-            self.add_spans_to_stats(traces.iter().flat_map(|trace| trace.iter()));
-            // Once stats have been computed we can drop all chunks that are not going to be
-            // sampled by the agent
-            let dropped_counts = drop_chunks(&mut traces);
-            header_tags.client_computed_top_level = true;
-            header_tags.client_computed_stats = true;
-            header_tags.dropped_p0_traces = dropped_counts.dropped_p0_traces;
-            header_tags.dropped_p0_spans = dropped_counts.dropped_p0_spans;
-        }
+        // if let StatsComputationStatus::Enabled { .. } = &**self.client_side_stats.load() {
+        //     if !self.client_computed_top_level {
+        //         for chunk in traces.iter_mut() {
+        //             compute_top_level_span(chunk);
+        //         }
+        //     }
+        //     self.add_spans_to_stats(traces.iter().flat_map(|trace| trace.iter()));
+        //     // Once stats have been computed we can drop all chunks that are not going to be
+        //     // sampled by the agent
+        //     let dropped_counts = drop_chunks(&mut traces);
+        //     header_tags.client_computed_top_level = true;
+        //     header_tags.client_computed_stats = true;
+        //     header_tags.dropped_p0_traces = dropped_counts.dropped_p0_traces;
+        //     header_tags.dropped_p0_spans = dropped_counts.dropped_p0_spans;
+        // }
 
         match self.output_format {
-            TraceExporterOutputFormat::V04 => rmp_serde::to_vec_named(&traces)
-                .map_err(|err| {
-                    error!("Error serializing traces: {err}");
-                    self.emit_metric(
-                        HealthMetric::Count(health_metrics::STAT_SER_TRACES_ERRORS, 1),
-                        None,
-                    );
-                    String::from("{}")
-                })
-                .and_then(|res| {
-                    self.send_data_to_url(
-                        &res,
-                        traces.len(),
-                        self.output_format.add_path(&self.endpoint.url),
-                    )
-                }),
-
-            TraceExporterOutputFormat::V07 => {
+            TraceExporterOutputFormat::V04 => {
                 let tracer_payload = trace_utils::collect_trace_chunks(
-                    TraceCollection::V07(traces),
+                    TraceCollection::V04(traces),
                     &header_tags,
                     &mut tracer_payload::DefaultTraceChunkProcessor,
                     self.endpoint.api_key.is_some(),
                 );
-
                 let endpoint = Endpoint {
                     url: self.output_format.add_path(&self.endpoint.url),
                     ..self.endpoint.clone()
                 };
-                let send_data = SendData::new(size, tracer_payload, header_tags, &endpoint, None);
+                let send_data = SendData::new(size, tracer_payload, header_tags, &endpoint);
                 self.runtime.block_on(async {
-                    match send_data.send().await.last_result {
-                        Ok(response) => match response.into_body().collect().await {
-                            Ok(body) => Ok(String::from_utf8_lossy(&body.to_bytes()).to_string()),
-                            Err(err) => {
-                                error!("Error reading agent response body: {err}");
-                                self.emit_metric(
-                                    HealthMetric::Count(health_metrics::STAT_SEND_TRACES_ERRORS, 1),
-                                    None,
-                                );
-                                Ok(String::from("{}"))
+                    let send_data_result = send_data.send().await;
+                    match send_data_result.last_result {
+                        Ok(response) => {
+                            self.emit_metric(
+                                HealthMetric::Count(
+                                    health_metrics::STAT_SEND_TRACES,
+                                    num_traces as i64,
+                                ),
+                                None,
+                            );
+                            match response.into_body().collect().await {
+                                Ok(body) => {
+                                    Ok(String::from_utf8_lossy(&body.to_bytes()).to_string())
+                                }
+                                Err(err) => {
+                                    error!("Error reading agent response body: {err}");
+                                    self.emit_metric(
+                                        HealthMetric::Count(
+                                            health_metrics::STAT_SEND_TRACES_ERRORS,
+                                            1,
+                                        ),
+                                        None,
+                                    );
+                                    Ok(String::from("{}"))
+                                }
                             }
-                        },
+                        }
                         Err(err) => {
                             error!("Error sending traces: {err}");
                             self.emit_metric(
@@ -675,6 +666,8 @@ impl TraceExporter {
                     }
                 })
             }
+
+            TraceExporterOutputFormat::V07 => todo!("We don't support translating to v07 yet"),
         }
     }
 }
@@ -685,14 +678,16 @@ const DEFAULT_AGENT_URL: &str = "http://127.0.0.1:8126";
 #[derive(Default)]
 pub struct TraceExporterBuilder {
     url: Option<String>,
-    tracer_version: String,
     hostname: String,
     env: String,
-    version: String,
+    app_version: String,
     service: String,
+    tracer_version: String,
     language: String,
     language_version: String,
     language_interpreter: String,
+    language_interpreter_vendor: String,
+    git_commit_sha: String,
     input_format: TraceExporterInputFormat,
     output_format: TraceExporterOutputFormat,
     response_callback: Option<Box<dyn ResponseCallback>>,
@@ -709,7 +704,7 @@ pub struct TraceExporterBuilder {
 }
 
 impl TraceExporterBuilder {
-    #[allow(missing_docs)]
+    /// Set url of the agent
     pub fn set_url(mut self, url: &str) -> Self {
         self.url = Some(url.to_owned());
         self
@@ -721,47 +716,68 @@ impl TraceExporterBuilder {
         self
     }
 
+    /// Set the hostname used for stats payload
+    /// Only used when client-side stats is enabled
     pub fn set_hostname(mut self, hostname: &str) -> Self {
         hostname.clone_into(&mut self.hostname);
         self
     }
 
+    /// Set the env used for stats payloads
+    /// Only used when client-side stats is enabled
     pub fn set_env(mut self, env: &str) -> Self {
         env.clone_into(&mut self.env);
         self
     }
 
-    pub fn set_version(mut self, version: &str) -> Self {
-        version.clone_into(&mut self.version);
+    /// Set the app version which corresponds to the `version` meta tag
+    /// Only used when client-side stats is enabled
+    pub fn set_app_version(mut self, app_version: &str) -> Self {
+        app_version.clone_into(&mut self.app_version);
         self
     }
 
+    /// Set the service name used for stats payloads.
+    /// Only used when client-side stats is enabled
     pub fn set_service(mut self, service: &str) -> Self {
         service.clone_into(&mut self.service);
         self
     }
 
-    #[allow(missing_docs)]
+    /// Set the `git_commit_sha` corresponding to the `_dd.git.commit.sha` meta tag
+    /// Only used when client-side stats is enabled
+    pub fn set_git_commit_sha(mut self, git_commit_sha: &str) -> Self {
+        git_commit_sha.clone_into(&mut self.git_commit_sha);
+        self
+    }
+
+    /// Set the `Datadog-Meta-Tracer-Version` header
     pub fn set_tracer_version(mut self, tracer_version: &str) -> Self {
         tracer_version.clone_into(&mut self.tracer_version);
         self
     }
 
-    #[allow(missing_docs)]
+    /// Set the `Datadog-Meta-Lang` header
     pub fn set_language(mut self, lang: &str) -> Self {
         lang.clone_into(&mut self.language);
         self
     }
 
-    #[allow(missing_docs)]
+    /// Set the `Datadog-Meta-Lang-Version` header
     pub fn set_language_version(mut self, lang_version: &str) -> Self {
         lang_version.clone_into(&mut self.language_version);
         self
     }
 
-    #[allow(missing_docs)]
+    /// Set the `Datadog-Meta-Lang-Interpreter` header
     pub fn set_language_interpreter(mut self, lang_interpreter: &str) -> Self {
         lang_interpreter.clone_into(&mut self.language_interpreter);
+        self
+    }
+
+    /// Set the `Datadog-Meta-Lang-Interpreter-Vendor` header
+    pub fn set_language_interpreter_vendor(mut self, lang_interpreter_vendor: &str) -> Self {
+        lang_interpreter_vendor.clone_into(&mut self.language_interpreter_vendor);
         self
     }
 
@@ -858,12 +874,14 @@ impl TraceExporterBuilder {
                 tracer_version: self.tracer_version,
                 language_version: self.language_version,
                 language_interpreter: self.language_interpreter,
+                language_interpreter_vendor: self.language_interpreter_vendor,
                 language: self.language,
+                git_commit_sha: self.git_commit_sha,
                 client_computed_stats: self.client_computed_stats,
                 client_computed_top_level: self.client_computed_top_level,
                 hostname: self.hostname,
                 env: self.env,
-                version: self.version,
+                app_version: self.app_version,
                 runtime_id: uuid::Uuid::new_v4().to_string(),
                 service: self.service,
             },
@@ -890,11 +908,14 @@ pub trait ResponseCallback {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use datadog_trace_utils::span_v04::Span;
     use httpmock::prelude::*;
     use httpmock::MockServer;
+    // use serde::Serialize;
     use std::collections::HashMap;
     use std::net;
     use std::time::Duration;
+    use tinybytes::BytesString;
     use tokio::time::sleep;
 
     #[test]
@@ -906,6 +927,8 @@ mod tests {
             .set_language("nodejs")
             .set_language_version("1.0")
             .set_language_interpreter("v8")
+            .set_language_interpreter_vendor("node")
+            .set_git_commit_sha("797e9ea")
             .set_input_format(TraceExporterInputFormat::Proxy)
             .set_output_format(TraceExporterOutputFormat::V07)
             .build()
@@ -923,6 +946,8 @@ mod tests {
         assert_eq!(exporter.metadata.language, "nodejs");
         assert_eq!(exporter.metadata.language_version, "1.0");
         assert_eq!(exporter.metadata.language_interpreter, "v8");
+        assert_eq!(exporter.metadata.language_interpreter_vendor, "node");
+        assert_eq!(exporter.metadata.git_commit_sha, "797e9ea");
         assert!(!exporter.metadata.client_computed_stats);
     }
 
@@ -960,6 +985,7 @@ mod tests {
             language: "rust".to_string(),
             language_version: "1.52.1".to_string(),
             language_interpreter: "rustc".to_string(),
+            language_interpreter_vendor: "rust-lang".to_string(),
             client_computed_stats: true,
             client_computed_top_level: true,
             ..Default::default()
@@ -971,6 +997,7 @@ mod tests {
         assert_eq!(tracer_header_tags.lang, "rust");
         assert_eq!(tracer_header_tags.lang_version, "1.52.1");
         assert_eq!(tracer_header_tags.lang_interpreter, "rustc");
+        assert_eq!(tracer_header_tags.lang_vendor, "rust-lang");
         assert!(tracer_header_tags.client_computed_stats);
         assert!(tracer_header_tags.client_computed_top_level);
     }
@@ -999,119 +1026,119 @@ mod tests {
         assert!(hashmap.contains_key("datadog-client-computed-stats"));
         assert!(hashmap.contains_key("datadog-client-computed-top-level"));
     }
-
-    #[test]
-    fn test_drop_chunks() {
-        let chunk_with_priority = vec![
-            pb::Span {
-                span_id: 1,
-                metrics: HashMap::from([
-                    (SAMPLING_PRIORITY_KEY.to_string(), 1.0),
-                    ("_dd.top_level".to_string(), 1.0),
-                ]),
-                ..Default::default()
-            },
-            pb::Span {
-                span_id: 2,
-                parent_id: 1,
-                ..Default::default()
-            },
-        ];
-        let chunk_with_null_priority = vec![
-            pb::Span {
-                span_id: 1,
-                metrics: HashMap::from([
-                    (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
-                    ("_dd.top_level".to_string(), 1.0),
-                ]),
-                ..Default::default()
-            },
-            pb::Span {
-                span_id: 2,
-                parent_id: 1,
-                ..Default::default()
-            },
-        ];
-        let chunk_without_priority = vec![
-            pb::Span {
-                span_id: 1,
-                metrics: HashMap::from([("_dd.top_level".to_string(), 1.0)]),
-                ..Default::default()
-            },
-            pb::Span {
-                span_id: 2,
-                parent_id: 1,
-                ..Default::default()
-            },
-        ];
-        let chunk_with_error = vec![
-            pb::Span {
-                span_id: 1,
-                error: 1,
-                metrics: HashMap::from([
-                    (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
-                    ("_dd.top_level".to_string(), 1.0),
-                ]),
-                ..Default::default()
-            },
-            pb::Span {
-                span_id: 2,
-                parent_id: 1,
-                ..Default::default()
-            },
-        ];
-        let chunk_with_a_single_span = vec![
-            pb::Span {
-                span_id: 1,
-                metrics: HashMap::from([
-                    (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
-                    ("_dd.top_level".to_string(), 1.0),
-                ]),
-                ..Default::default()
-            },
-            pb::Span {
-                span_id: 2,
-                parent_id: 1,
-                metrics: HashMap::from([(SAMPLING_SINGLE_SPAN_MECHANISM.to_string(), 8.0)]),
-                ..Default::default()
-            },
-        ];
-        let chunk_with_analyzed_span = vec![
-            pb::Span {
-                span_id: 1,
-                metrics: HashMap::from([
-                    (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
-                    ("_dd.top_level".to_string(), 1.0),
-                ]),
-                ..Default::default()
-            },
-            pb::Span {
-                span_id: 2,
-                parent_id: 1,
-                metrics: HashMap::from([(SAMPLING_ANALYTICS_RATE_KEY.to_string(), 1.0)]),
-                ..Default::default()
-            },
-        ];
-
-        let chunks_and_expected_sampled_spans = vec![
-            (chunk_with_priority, 2),
-            (chunk_with_null_priority, 0),
-            (chunk_without_priority, 2),
-            (chunk_with_error, 2),
-            (chunk_with_a_single_span, 1),
-            (chunk_with_analyzed_span, 1),
-        ];
-
-        for (chunk, expected_count) in chunks_and_expected_sampled_spans.into_iter() {
-            let mut traces = vec![chunk];
-            drop_chunks(&mut traces);
-            if expected_count == 0 {
-                assert!(traces.is_empty());
-            } else {
-                assert_eq!(traces[0].len(), expected_count);
-            }
-        }
-    }
+    //
+    // #[test]
+    // fn test_drop_chunks() {
+    //     let chunk_with_priority = vec![
+    //         pb::Span {
+    //             span_id: 1,
+    //             metrics: HashMap::from([
+    //                 (SAMPLING_PRIORITY_KEY.to_string(), 1.0),
+    //                 ("_dd.top_level".to_string(), 1.0),
+    //             ]),
+    //             ..Default::default()
+    //         },
+    //         pb::Span {
+    //             span_id: 2,
+    //             parent_id: 1,
+    //             ..Default::default()
+    //         },
+    //     ];
+    //     let chunk_with_null_priority = vec![
+    //         pb::Span {
+    //             span_id: 1,
+    //             metrics: HashMap::from([
+    //                 (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
+    //                 ("_dd.top_level".to_string(), 1.0),
+    //             ]),
+    //             ..Default::default()
+    //         },
+    //         pb::Span {
+    //             span_id: 2,
+    //             parent_id: 1,
+    //             ..Default::default()
+    //         },
+    //     ];
+    //     let chunk_without_priority = vec![
+    //         pb::Span {
+    //             span_id: 1,
+    //             metrics: HashMap::from([("_dd.top_level".to_string(), 1.0)]),
+    //             ..Default::default()
+    //         },
+    //         pb::Span {
+    //             span_id: 2,
+    //             parent_id: 1,
+    //             ..Default::default()
+    //         },
+    //     ];
+    //     let chunk_with_error = vec![
+    //         pb::Span {
+    //             span_id: 1,
+    //             error: 1,
+    //             metrics: HashMap::from([
+    //                 (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
+    //                 ("_dd.top_level".to_string(), 1.0),
+    //             ]),
+    //             ..Default::default()
+    //         },
+    //         pb::Span {
+    //             span_id: 2,
+    //             parent_id: 1,
+    //             ..Default::default()
+    //         },
+    //     ];
+    //     let chunk_with_a_single_span = vec![
+    //         pb::Span {
+    //             span_id: 1,
+    //             metrics: HashMap::from([
+    //                 (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
+    //                 ("_dd.top_level".to_string(), 1.0),
+    //             ]),
+    //             ..Default::default()
+    //         },
+    //         pb::Span {
+    //             span_id: 2,
+    //             parent_id: 1,
+    //             metrics: HashMap::from([(SAMPLING_SINGLE_SPAN_MECHANISM.to_string(), 8.0)]),
+    //             ..Default::default()
+    //         },
+    //     ];
+    //     let chunk_with_analyzed_span = vec![
+    //         pb::Span {
+    //             span_id: 1,
+    //             metrics: HashMap::from([
+    //                 (SAMPLING_PRIORITY_KEY.to_string(), 0.0),
+    //                 ("_dd.top_level".to_string(), 1.0),
+    //             ]),
+    //             ..Default::default()
+    //         },
+    //         pb::Span {
+    //             span_id: 2,
+    //             parent_id: 1,
+    //             metrics: HashMap::from([(SAMPLING_ANALYTICS_RATE_KEY.to_string(), 1.0)]),
+    //             ..Default::default()
+    //         },
+    //     ];
+    //
+    //     let chunks_and_expected_sampled_spans = vec![
+    //         (chunk_with_priority, 2),
+    //         (chunk_with_null_priority, 0),
+    //         (chunk_without_priority, 2),
+    //         (chunk_with_error, 2),
+    //         (chunk_with_a_single_span, 1),
+    //         (chunk_with_analyzed_span, 1),
+    //     ];
+    //
+    //     for (chunk, expected_count) in chunks_and_expected_sampled_spans.into_iter() {
+    //         let mut traces = vec![chunk];
+    //         drop_chunks(&mut traces);
+    //         if expected_count == 0 {
+    //             assert!(traces.is_empty());
+    //         } else {
+    //             assert_eq!(traces[0].len(), expected_count);
+    //         }
+    //     }
+    // }
 
     #[cfg_attr(miri, ignore)]
     #[test]
@@ -1121,16 +1148,16 @@ mod tests {
         let mock_traces = server.mock(|when, then| {
             when.method(POST)
                 .header("Content-type", "application/msgpack")
-                .path("/v0.7/traces");
+                .path("/v0.4/traces");
             then.status(200).body("");
         });
 
-        let mock_stats = server.mock(|when, then| {
-            when.method(POST)
-                .header("Content-type", "application/msgpack")
-                .path("/v0.6/stats");
-            then.status(200).body("");
-        });
+        // let mock_stats = server.mock(|when, then| {
+        //     when.method(POST)
+        //         .header("Content-type", "application/msgpack")
+        //         .path("/v0.6/stats");
+        //     then.status(200).body("");
+        // });
 
         let mock_info = server.mock(|when, then| {
             when.method(GET).path("/info");
@@ -1148,12 +1175,12 @@ mod tests {
             .set_language_version("1.0")
             .set_language_interpreter("v8")
             .set_input_format(TraceExporterInputFormat::V04)
-            .set_output_format(TraceExporterOutputFormat::V07)
+            .set_output_format(TraceExporterOutputFormat::V04)
             .enable_stats(Duration::from_secs(10))
             .build()
             .unwrap();
 
-        let trace_chunk = vec![pb::Span {
+        let trace_chunk = vec![Span {
             duration: 10,
             ..Default::default()
         }];
@@ -1171,9 +1198,10 @@ mod tests {
         exporter.shutdown(None).unwrap();
 
         mock_traces.assert();
-        mock_stats.assert();
+        //mock_stats.assert();
     }
 
+    /* TODO (APMSP-1583) Re-enable with client stats
     #[cfg_attr(miri, ignore)]
     #[test]
     fn test_shutdown_with_timeout() {
@@ -1182,16 +1210,16 @@ mod tests {
         let mock_traces = server.mock(|when, then| {
             when.method(POST)
                 .header("Content-type", "application/msgpack")
-                .path("/v0.7/traces");
+                .path("/v0.4/traces");
             then.status(200).body("");
         });
 
-        let _mock_stats = server.mock(|when, then| {
-            when.method(POST)
-                .header("Content-type", "application/msgpack")
-                .path("/v0.6/stats");
-            then.delay(Duration::from_secs(10)).status(200).body("");
-        });
+        // let _mock_stats = server.mock(|when, then| {
+        //     when.method(POST)
+        //         .header("Content-type", "application/msgpack")
+        //         .path("/v0.6/stats");
+        //     then.delay(Duration::from_secs(10)).status(200).body("");
+        // });
 
         let mock_info = server.mock(|when, then| {
             when.method(GET).path("/info");
@@ -1209,12 +1237,12 @@ mod tests {
             .set_language_version("1.0")
             .set_language_interpreter("v8")
             .set_input_format(TraceExporterInputFormat::V04)
-            .set_output_format(TraceExporterOutputFormat::V07)
+            .set_output_format(TraceExporterOutputFormat::V04)
             .enable_stats(Duration::from_secs(10))
             .build()
             .unwrap();
 
-        let trace_chunk = vec![pb::Span {
+        let trace_chunk = vec![Span {
             duration: 10,
             ..Default::default()
         }];
@@ -1235,6 +1263,7 @@ mod tests {
 
         mock_traces.assert();
     }
+     */
 
     fn read(socket: &net::UdpSocket) -> String {
         let mut buf = [0; 1_000];
@@ -1273,13 +1302,13 @@ mod tests {
             stats_socket.local_addr().unwrap().to_string(),
         );
 
-        let traces: Vec<Vec<pb::Span>> = vec![
-            vec![pb::Span {
-                name: "test".to_string(),
+        let traces: Vec<Vec<Span>> = vec![
+            vec![Span {
+                name: BytesString::from_slice(b"test").unwrap(),
                 ..Default::default()
             }],
-            vec![pb::Span {
-                name: "test2".to_string(),
+            vec![Span {
+                name: BytesString::from_slice(b"test2").unwrap(),
                 ..Default::default()
             }],
         ];
@@ -1304,6 +1333,32 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)]
+    fn invalid_traces() {
+        let stats_socket = net::UdpSocket::bind("127.0.0.1:0").expect("failed to bind host socket");
+        let _ = stats_socket.set_read_timeout(Some(Duration::from_millis(500)));
+
+        let fake_agent = MockServer::start();
+
+        let exporter = build_test_exporter(
+            fake_agent.url("/v0.4/traces"),
+            stats_socket.local_addr().unwrap().to_string(),
+        );
+
+        let _result = exporter
+            .send(b"some_bad_payload", 1)
+            .expect("failed to send trace");
+
+        assert_eq!(
+            &format!(
+                "datadog.libdatadog.deser_traces.errors:1|c|#libdatadog_version:{}",
+                env!("CARGO_PKG_VERSION")
+            ),
+            &read(&stats_socket)
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
     fn health_metrics_error() {
         let stats_socket = net::UdpSocket::bind("127.0.0.1:0").expect("failed to bind host socket");
         let _ = stats_socket.set_read_timeout(Some(Duration::from_millis(500)));
@@ -1320,8 +1375,8 @@ mod tests {
             stats_socket.local_addr().unwrap().to_string(),
         );
 
-        let traces: Vec<Vec<pb::Span>> = vec![vec![pb::Span {
-            name: "test".to_string(),
+        let traces: Vec<Vec<Span>> = vec![vec![Span {
+            name: BytesString::from_slice(b"test").unwrap(),
             ..Default::default()
         }]];
         let bytes = rmp_serde::to_vec_named(&traces).expect("failed to serialize static trace");
@@ -1334,6 +1389,15 @@ mod tests {
             ),
             &read(&stats_socket)
         );
-        assert_eq!(&format!("datadog.libdatadog.send.traces.errors:1|c|#libdatadog_version:{},response_code:400", env!("CARGO_PKG_VERSION")), &read(&stats_socket));
+        // todo: support health metrics from within send data?
+        //assert_eq!(&format!("datadog.libdatadog.send.traces.errors:1|c|#libdatadog_version:{},
+        // response_code:400", env!("CARGO_PKG_VERSION")), &read(&stats_socket));
+        assert_eq!(
+            &format!(
+                "datadog.libdatadog.send.traces.errors:1|c|#libdatadog_version:{}",
+                env!("CARGO_PKG_VERSION")
+            ),
+            &read(&stats_socket)
+        );
     }
 }

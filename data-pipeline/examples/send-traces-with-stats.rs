@@ -7,7 +7,7 @@ use data_pipeline::trace_exporter::{
 use datadog_trace_protobuf::pb;
 use std::{
     collections::HashMap,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, UNIX_EPOCH},
 };
 
 fn get_span(now: i64, trace_id: u64, span_id: u64) -> pb::Span {
@@ -34,7 +34,7 @@ fn main() {
         .set_url("http://localhost:8126")
         .set_hostname("test")
         .set_env("testing")
-        .set_version(env!("CARGO_PKG_VERSION"))
+        .set_app_version(env!("CARGO_PKG_VERSION"))
         .set_service("data-pipeline-test")
         .set_tracer_version(env!("CARGO_PKG_VERSION"))
         .set_language("rust")
@@ -44,10 +44,7 @@ fn main() {
         .enable_stats(Duration::from_secs(10))
         .build()
         .unwrap();
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as i64;
+    let now = UNIX_EPOCH.elapsed().unwrap().as_nanos() as i64;
 
     let mut traces = Vec::new();
     for trace_id in 1..=100 {

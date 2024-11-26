@@ -14,6 +14,7 @@ use datadog_sidecar::config;
 use datadog_sidecar::config::LogMethod;
 use datadog_sidecar::crashtracker::crashtracker_unix_socket_path;
 use datadog_sidecar::one_way_shared_memory::{OneWayShmReader, ReaderOpener};
+use datadog_sidecar::service::agent_info::AgentInfoReader;
 use datadog_sidecar::service::{
     blocking::{self, SidecarTransport},
     InstanceId, QueueId, RuntimeMetadata, SerializedTracerHeaderTags, SessionConfig, SidecarAction,
@@ -22,7 +23,7 @@ use datadog_sidecar::shm_remote_config::{path_for_remote_config, RemoteConfigRea
 use ddcommon::tag::Tag;
 use ddcommon::Endpoint;
 use ddcommon_ffi as ffi;
-use ddcommon_ffi::MaybeError;
+use ddcommon_ffi::{CharSlice, MaybeError};
 use ddtelemetry::{
     data::{self, Dependency, Integration},
     worker::{LifecycleAction, TelemetryActions},
@@ -89,6 +90,18 @@ pub extern "C" fn ddog_alloc_anon_shm_handle(
     handle: &mut *mut ShmHandle,
 ) -> MaybeError {
     *handle = Box::into_raw(Box::new(try_c!(ShmHandle::new(size))));
+
+    MaybeError::None
+}
+
+#[no_mangle]
+pub extern "C" fn ddog_alloc_anon_shm_handle_named(
+    size: usize,
+    handle: &mut *mut ShmHandle,
+    name: CharSlice,
+) -> MaybeError {
+    let name = name.to_utf8_lossy();
+    *handle = Box::into_raw(Box::new(try_c!(ShmHandle::new_named(size, name.as_ref()))));
 
     MaybeError::None
 }
@@ -688,6 +701,25 @@ pub unsafe extern "C" fn ddog_sidecar_send_debugger_datum(
 
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
+#[allow(improper_ctypes_definitions)] // DebuggerPayload is just a pointer, we hide its internals
+pub unsafe extern "C" fn ddog_sidecar_send_debugger_diagnostics(
+    transport: &mut Box<SidecarTransport>,
+    instance_id: &InstanceId,
+    queue_id: QueueId,
+    diagnostics_payload: DebuggerPayload,
+) -> MaybeError {
+    try_c!(blocking::send_debugger_diagnostics(
+        transport,
+        instance_id,
+        queue_id,
+        diagnostics_payload,
+    ));
+
+    MaybeError::None
+}
+
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn ddog_sidecar_set_remote_config_data(
     transport: &mut Box<SidecarTransport>,
     instance_id: &InstanceId,
@@ -911,3 +943,35 @@ pub unsafe extern "C" fn ddog_sidecar_get_crashtracker_unix_socket_path() -> ffi
     buf.copy_from_slice(str.as_bytes());
     ffi::CharSlice::from_raw_parts(malloced as *mut c_char, size)
 }
+
+/// Gets an agent info reader.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ddog_get_agent_info_reader(endpoint: &Endpoint) -> Box<AgentInfoReader> {
+    Box::new(AgentInfoReader::new(endpoint))
+}
+
+/// Gets the current agent info environment (or empty if not existing)
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ddog_get_agent_info_env<'a>(
+    reader: &'a mut AgentInfoReader,
+    changed: &mut bool,
+) -> ffi::CharSlice<'a> {
+    let (has_changed, info) = reader.read();
+    *changed = has_changed;
+    let config = if let Some(info) = info {
+        info.config.as_ref()
+    } else {
+        None
+    };
+    config
+        .and_then(|c| c.default_env.as_ref())
+        .map(|s| ffi::CharSlice::from(s.as_str()))
+        .unwrap_or(ffi::CharSlice::empty())
+}
+
+/// Drops the agent info reader.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn ddog_drop_agent_info_reader(_: Box<AgentInfoReader>) {}

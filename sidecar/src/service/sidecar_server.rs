@@ -39,6 +39,10 @@ use serde::{Deserialize, Serialize};
 use tokio::task::{JoinError, JoinHandle};
 
 use crate::config::get_product_endpoint;
+use crate::service::agent_info::AgentInfos;
+use crate::service::debugger_diagnostics_bookkeeper::{
+    DebuggerDiagnosticsBookkeeper, DebuggerDiagnosticsBookkeeperStats,
+};
 use crate::service::exception_hash_rate_limiter::EXCEPTION_HASH_LIMITER;
 use crate::service::remote_configs::{RemoteConfigNotifyTarget, RemoteConfigs};
 use crate::service::runtime_info::ActiveApplication;
@@ -71,6 +75,7 @@ struct SidecarStats {
     enqueued_telemetry_data: EnqueuedTelemetryStats,
     remote_config_clients: u32,
     remote_configs: MultiTargetStats,
+    debugger_diagnostics_bookkeeping: DebuggerDiagnosticsBookkeeperStats,
     telemetry_metrics_contexts: u32,
     telemetry_worker: TelemetryWorkerStats,
     telemetry_worker_errors: u32,
@@ -105,8 +110,12 @@ pub struct SidecarServer {
         Arc<Mutex<Option<ManualFutureCompleter<ddtelemetry::config::Config>>>>,
     /// Keeps track of the number of submitted payloads.
     pub submitted_payloads: Arc<AtomicU64>,
+    /// All tracked agent infos per endpoint
+    pub agent_infos: AgentInfos,
     /// All remote config handling
     remote_configs: RemoteConfigs,
+    /// Diagnostics bookkeeper
+    debugger_diagnostics_bookkeeper: Arc<DebuggerDiagnosticsBookkeeper>,
     /// The ProcessHandle tied to the connection
     #[cfg(windows)]
     process_handle: Option<ProcessHandle>,
@@ -277,7 +286,7 @@ impl SidecarServer {
         payload_params.measure_size(&mut size);
         match payload_params.try_into() {
             Ok(payload) => {
-                let data = SendData::new(size, payload, headers, target, None);
+                let data = SendData::new(size, payload, headers, target);
                 self.trace_flusher.enqueue(data);
             }
             Err(e) => {
@@ -388,6 +397,7 @@ impl SidecarServer {
                 })
                 .sum(),
             remote_configs: self.remote_configs.stats(),
+            debugger_diagnostics_bookkeeping: self.debugger_diagnostics_bookkeeper.stats(),
             telemetry_metrics_contexts: sessions
                 .values()
                 .map(|s| {
@@ -432,6 +442,14 @@ impl SidecarInterface for SidecarServer {
         queue_id: QueueId,
         actions: Vec<SidecarAction>,
     ) -> Self::EnqueueActionsFut {
+        fn is_stop_actions(actions: &[SidecarAction]) -> bool {
+            actions.len() == 1
+                && matches!(
+                    actions[0],
+                    SidecarAction::Telemetry(TelemetryActions::Lifecycle(LifecycleAction::Stop))
+                )
+        }
+
         let rt_info = self.get_runtime(&instance_id);
         let mut applications = rt_info.lock_applications();
         match applications.entry(queue_id) {
@@ -439,8 +457,12 @@ impl SidecarInterface for SidecarServer {
                 let value = entry.get_mut();
                 match value.app_or_actions {
                     AppOrQueue::Inactive => {
-                        value.app_or_actions =
-                            AppOrQueue::Queue(EnqueuedTelemetryData::processed(actions));
+                        if is_stop_actions(&actions) {
+                            entry.remove();
+                        } else {
+                            value.app_or_actions =
+                                AppOrQueue::Queue(EnqueuedTelemetryData::processed(actions));
+                        }
                     }
                     AppOrQueue::Queue(ref mut data) => {
                         data.process(actions);
@@ -481,14 +503,7 @@ impl SidecarInterface for SidecarServer {
                 }
             }
             Entry::Vacant(entry) => {
-                if actions.len() != 1
-                    || !matches!(
-                        actions[0],
-                        SidecarAction::Telemetry(TelemetryActions::Lifecycle(
-                            LifecycleAction::Stop
-                        ))
-                    )
-                {
+                if !is_stop_actions(&actions) {
                     entry.insert(ActiveApplication {
                         app_or_actions: AppOrQueue::Queue(EnqueuedTelemetryData::processed(
                             actions,
@@ -689,6 +704,11 @@ impl SidecarInterface for SidecarServer {
             );
             cfg.set_endpoint(logs_endpoint, diagnostics_endpoint).ok();
         });
+        if config.endpoint.api_key.is_none() {
+            // no agent info if agentless
+            *session.agent_infos.lock().unwrap() =
+                Some(self.agent_infos.query_for(config.endpoint.clone()));
+        }
         session.set_remote_config_invariants(ConfigInvariants {
             language: config.language,
             tracer_version: config.tracer_version,
@@ -831,6 +851,31 @@ impl SidecarInterface for SidecarServer {
                 );
             }
             Err(e) => error!("Failed mapping shared debugger data memory: {}", e),
+        }
+
+        no_response()
+    }
+
+    type SendDebuggerDiagnosticsFut = NoResponse;
+
+    fn send_debugger_diagnostics(
+        self,
+        _: Context,
+        instance_id: InstanceId,
+        queue_id: QueueId,
+        diagnostics_payload: Vec<u8>,
+    ) -> Self::SendDebuggerDiagnosticsFut {
+        let session = self.get_session(&instance_id.session_id);
+        let payload = serde_json::from_slice(diagnostics_payload.as_slice()).unwrap();
+        // We segregate RC by endpoint.
+        // So we assume that runtime ids are unique per endpoint and we can safely filter globally.
+        if self.debugger_diagnostics_bookkeeper.add_payload(&payload) {
+            session.send_debugger_data(
+                DebuggerType::Diagnostics,
+                &instance_id.runtime_id,
+                queue_id,
+                serde_json::to_vec(&vec![payload]).unwrap(),
+            );
         }
 
         no_response()

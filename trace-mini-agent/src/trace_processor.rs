@@ -98,13 +98,7 @@ impl TraceProcessor for ServerlessTraceProcessor {
             true, // In mini agent, we always send agentless
         );
 
-        let send_data = SendData::new(
-            body_size,
-            payload,
-            tracer_header_tags,
-            &config.trace_intake,
-            config.proxy_url.clone(),
-        );
+        let send_data = SendData::new(body_size, payload, tracer_header_tags, &config.trace_intake);
 
         // send trace payload to our trace flusher
         match tx.send(send_data).await {
@@ -128,11 +122,7 @@ impl TraceProcessor for ServerlessTraceProcessor {
 mod tests {
     use datadog_trace_obfuscation::obfuscation_config::ObfuscationConfig;
     use hyper::Request;
-    use std::{
-        collections::HashMap,
-        sync::Arc,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
     use tokio::sync::mpsc::{self, Receiver, Sender};
 
     use crate::{
@@ -148,10 +138,7 @@ mod tests {
     use ddcommon::Endpoint;
 
     fn get_current_timestamp_nanos() -> i64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as i64
+        UNIX_EPOCH.elapsed().unwrap().as_nanos() as i64
     }
 
     fn create_test_config() -> Config {

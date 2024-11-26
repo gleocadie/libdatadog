@@ -131,7 +131,6 @@ impl DatadogTestAgentContainer {
 ///         TracerPayloadCollection::V04(vec![trace.clone()]),
 ///         TracerHeaderTags::default(),
 ///         &endpoint,
-///         None,
 ///     );
 ///
 ///     let _result = data.send().await;
@@ -163,7 +162,7 @@ impl DatadogTestAgent {
             container: DatadogTestAgentContainer::new(relative_snapshot_path)
                 .start()
                 .await
-                .expect("Unable to start DatadogTestAgent"),
+                .expect("Unable to start DatadogTestAgent, is the Docker Daemon running?"),
         }
     }
 
