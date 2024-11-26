@@ -3,7 +3,7 @@
 
 use crate::slice::AsBytes;
 use crate::Error;
-use ddcommon::{parse_uri, Endpoint};
+use ddcommon_net1::{parse_uri, Endpoint};
 use hyper::http::uri::{Authority, Parts};
 use std::borrow::Cow;
 use std::str::FromStr;
@@ -80,6 +80,7 @@ pub extern "C" fn ddog_endpoint_drop(_: Box<Endpoint>) {}
 mod tests {
     use super::*;
     use crate::CharSlice;
+    use ddcommon_net1::Endpoint;
 
     #[test]
     fn test_ddog_endpoint_from_url() {
