@@ -117,7 +117,10 @@ pub unsafe extern "C" fn ddog_trace_exporter_send(
     let static_trace: ByteSlice<'static> = std::mem::transmute(trace);
 
     handle
-        .send(static_trace, trace_count)
+        .send(
+            tinybytes::Bytes::from_static(static_trace.as_slice()),
+            trace_count,
+        )
         .unwrap_or(String::from(""));
     MaybeError::None
 }
