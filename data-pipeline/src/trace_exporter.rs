@@ -919,6 +919,7 @@ mod tests {
     use tinybytes::BytesString;
     use tokio::time::sleep;
 
+    #[cfg_attr(all(miri, target_os = "macos"), ignore)]
     #[test]
     fn new() {
         let builder = TraceExporterBuilder::default();
@@ -952,6 +953,7 @@ mod tests {
         assert!(!exporter.metadata.client_computed_stats);
     }
 
+    #[cfg_attr(all(miri, target_os = "macos"), ignore)]
     #[test]
     fn new_defaults() {
         let builder = TraceExporterBuilder::default();
