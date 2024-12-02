@@ -13,6 +13,7 @@ permissions:
 env:
   OUTPUT_DIR: bin
   PACKAGES_DIR: packages
+  NUGET_NAME: ganeshnj.libdatadog
 
 jobs:
   build:
@@ -112,7 +113,7 @@ jobs:
           $version_suffix="ci.${{ github.event.number }}.${{ github.run_number }}"
           $version="$current_version-$version_suffix"
           echo "NUGET_VERSION=$version" >> $env:GITHUB_OUTPUT
-          dotnet pack windows/libdatadog.csproj -p:LibDatadogBinariesOutputDir=../${{ env.OUTPUT_DIR }} -p:LibDatadogVersion=$version -o ${{ env.PACKAGES_DIR }}
+          dotnet pack windows/libdatadog.csproj -p:LibDatadogBinariesOutputDir=../${{ env.OUTPUT_DIR }} -p:LibDatadogVersion=$version -p:PackageID=${{ env.NUGET_NAME }} -o ${{ env.PACKAGES_DIR }} 
 
       - name: Upload package
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
@@ -154,5 +155,6 @@ jobs:
       - name: Run
         run: |
           cd tests/nuget_package
-          dotnet add nuget_package.csproj package libdatadog --version ${{ needs.pack.outputs.NUGET_VERSION }}
+          dotnet add nuget_package.csproj package ${{ env.NUGET_NAME }} --version ${{ needs.pack.outputs.NUGET_VERSION }}
+          
           dotnet run
