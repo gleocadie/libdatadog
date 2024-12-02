@@ -8,7 +8,6 @@ use datadog_trace_utils::span_v04::{trace_utils, Span};
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use tinybytes::BytesString;
 
 const TAG_STATUS_CODE: &str = "http.status_code";
 const TAG_SYNTHETICS: &str = "synthetics";
@@ -17,18 +16,15 @@ const TAG_ORIGIN: &str = "_dd.origin";
 
 /// This struct represent the key used to group spans together to compute stats.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
-pub(super) struct AggregationKey<'a, T>
-where
-    T: Borrow<str>,
-{
-    resource_name: T,
-    service_name: T,
-    operation_name: T,
-    span_type: T,
-    span_kind: T,
+pub(super) struct AggregationKey<'a> {
+    resource_name: Cow<'a, str>,
+    service_name: Cow<'a, str>,
+    operation_name: Cow<'a, str>,
+    span_type: Cow<'a, str>,
+    span_kind: Cow<'a, str>,
     http_status_code: u32,
     is_synthetics_request: bool,
-    peer_tags: Vec<(Cow<'a, str>, T)>,
+    peer_tags: Vec<(Cow<'a, str>, Cow<'a, str>)>,
     is_trace_root: bool,
 }
 
@@ -49,10 +45,7 @@ trait BorrowedAggregationKeyHelper {
     fn borrowed_aggregation_key(&self) -> BorrowedAggregationKey;
 }
 
-impl<T> BorrowedAggregationKeyHelper for AggregationKey<'_, T>
-where
-    T: Borrow<str>,
-{
+impl BorrowedAggregationKeyHelper for AggregationKey<'_> {
     fn borrowed_aggregation_key(&self) -> BorrowedAggregationKey {
         BorrowedAggregationKey {
             resource_name: self.resource_name.borrow(),
@@ -65,7 +58,7 @@ where
             peer_tags: self
                 .peer_tags
                 .iter()
-                .map(|(tag, value)| (tag.as_ref(), value.borrow()))
+                .map(|(tag, value)| (tag.borrow(), value.borrow()))
                 .collect(),
             is_trace_root: self.is_trace_root,
         }
@@ -78,9 +71,8 @@ impl BorrowedAggregationKeyHelper for BorrowedAggregationKey<'_> {
     }
 }
 
-impl<'a, 'b, T> Borrow<dyn BorrowedAggregationKeyHelper + 'b> for AggregationKey<'a, T>
+impl<'a, 'b> Borrow<dyn BorrowedAggregationKeyHelper + 'b> for AggregationKey<'a>
 where
-    T: Borrow<str> + 'a,
     'a: 'b,
 {
     fn borrow(&self) -> &(dyn BorrowedAggregationKeyHelper + 'b) {
@@ -103,29 +95,28 @@ impl<'a> std::hash::Hash for (dyn BorrowedAggregationKeyHelper + 'a) {
     }
 }
 
-impl<'a> AggregationKey<'a, BytesString> {
+impl<'a> AggregationKey<'a> {
     /// Return an AggregationKey matching the given span.
     ///
     /// If `peer_tags_keys` is not empty then the peer tags of the span will be included in the
     /// key.
-    pub(super) fn from_span(span: &Span, peer_tag_keys: &'a [&'a str]) -> Self {
+    pub(super) fn from_span(span: &'a Span, peer_tag_keys: &'a [&'a str]) -> Self {
         let span_kind = span
             .meta
             .get(TAG_SPANKIND)
-            .map(|s| s)
-            .cloned()
+            .map(|s| s.as_str())
             .unwrap_or_default();
-        let peer_tags = if client_or_producer(span_kind.as_str()) {
+        let peer_tags = if client_or_producer(span_kind) {
             get_peer_tags(span, peer_tag_keys)
         } else {
             vec![]
         };
         Self {
-            resource_name: span.resource.clone(),
-            service_name: span.service.clone(),
-            operation_name: span.name.clone(),
-            span_type: span.r#type.clone(),
-            span_kind,
+            resource_name: span.resource.as_str().into(),
+            service_name: span.service.as_str().into(),
+            operation_name: span.name.as_str().into(),
+            span_type: span.r#type.as_str().into(),
+            span_kind: span_kind.into(),
             http_status_code: get_status_code(span),
             is_synthetics_request: span
                 .meta
@@ -134,38 +125,38 @@ impl<'a> AggregationKey<'a, BytesString> {
             is_trace_root: span.parent_id == 0,
             peer_tags: peer_tags
                 .into_iter()
-                .map(|(k, v)| (Cow::from(k), v))
+                .map(|(k, v)| (k.into(), v.into()))
                 .collect(),
         }
     }
 
-    pub(super) fn to_string_key(self) -> AggregationKey<'static, String> {
-        AggregationKey::<String> {
-            resource_name: self.resource_name.copy_to_string(),
-            service_name: self.service_name.copy_to_string(),
-            operation_name: self.operation_name.copy_to_string(),
-            span_type: self.span_type.copy_to_string(),
-            span_kind: self.span_kind.copy_to_string(),
+    pub(super) fn to_static_key(self) -> AggregationKey<'static> {
+        AggregationKey {
+            resource_name: Cow::Owned(self.resource_name.into_owned()),
+            service_name: Cow::Owned(self.service_name.into_owned()),
+            operation_name: Cow::Owned(self.operation_name.into_owned()),
+            span_type: Cow::Owned(self.span_type.into_owned()),
+            span_kind: Cow::Owned(self.span_kind.into_owned()),
             http_status_code: self.http_status_code,
             is_synthetics_request: self.is_synthetics_request,
             is_trace_root: self.is_trace_root,
             peer_tags: self
                 .peer_tags
                 .into_iter()
-                .map(|(key, value)| (Cow::from(key.into_owned()), value.copy_to_string()))
+                .map(|(key, value)| (Cow::from(key.into_owned()), Cow::from(value.into_owned())))
                 .collect(),
         }
     }
 }
 
-impl From<pb::ClientGroupedStats> for AggregationKey<'static, String> {
+impl From<pb::ClientGroupedStats> for AggregationKey<'static> {
     fn from(value: pb::ClientGroupedStats) -> Self {
         Self {
-            resource_name: value.resource,
-            service_name: value.service,
-            operation_name: value.name,
-            span_type: value.r#type,
-            span_kind: value.span_kind,
+            resource_name: value.resource.into(),
+            service_name: value.service.into(),
+            operation_name: value.name.into(),
+            span_type: value.r#type.into(),
+            span_kind: value.span_kind.into(),
             http_status_code: value.http_status_code,
             is_synthetics_request: value.synthetics,
             peer_tags: value
@@ -173,7 +164,7 @@ impl From<pb::ClientGroupedStats> for AggregationKey<'static, String> {
                 .into_iter()
                 .filter_map(|t| {
                     let (key, value) = t.split_once(":")?;
-                    Some((Cow::from(key.to_string()), value.to_string()))
+                    Some((key.to_string().into(), value.to_string().into()))
                 })
                 .collect(),
             is_trace_root: value.is_trace_root == 1,
@@ -199,10 +190,10 @@ fn client_or_producer(span_kind: &str) -> bool {
 
 /// Parse the meta tags of a span and return a list of the peer tags based on the list of
 /// `peer_tag_keys`
-fn get_peer_tags<'a>(span: &'_ Span, peer_tag_keys: &'a [&'a str]) -> Vec<(&'a str, BytesString)> {
+fn get_peer_tags<'k, 'v>(span: &'v Span, peer_tag_keys: &'k [&'k str]) -> Vec<(&'k str, &'v str)> {
     peer_tag_keys
         .iter()
-        .filter_map(|key| Some((*key, span.meta.get(*key).cloned()?)))
+        .filter_map(|key| Some((*key, span.meta.get(*key)?.as_str())))
         .collect()
 }
 
@@ -239,7 +230,7 @@ impl GroupedStats {
 /// spans aggregated on their AggregationKey.
 #[derive(Debug, Clone)]
 pub(super) struct StatsBucket {
-    data: HashMap<AggregationKey<'static, String>, GroupedStats>,
+    data: HashMap<AggregationKey<'static>, GroupedStats>,
     start: u64,
 }
 
@@ -254,13 +245,13 @@ impl StatsBucket {
 
     /// Insert a value as stats in the group corresponding to the aggregation key, if it does
     /// not exist it creates it.
-    pub(super) fn insert(&mut self, key: AggregationKey<'_, BytesString>, value: &Span) {
+    pub(super) fn insert(&mut self, key: AggregationKey<'_>, value: &Span) {
         if let Some(grouped_stats) = self.data.get_mut(&key as &dyn BorrowedAggregationKeyHelper) {
             grouped_stats.insert(value);
         } else {
             let mut grouped_stats = GroupedStats::default();
             grouped_stats.insert(value);
-            self.data.insert(key.to_string_key(), grouped_stats);
+            self.data.insert(key.to_static_key(), grouped_stats);
         }
     }
 
@@ -282,16 +273,13 @@ impl StatsBucket {
 }
 
 /// Create a ClientGroupedStats struct based on the given AggregationKey and GroupedStats
-fn encode_grouped_stats(
-    key: AggregationKey<String>,
-    group: GroupedStats,
-) -> pb::ClientGroupedStats {
+fn encode_grouped_stats(key: AggregationKey, group: GroupedStats) -> pb::ClientGroupedStats {
     pb::ClientGroupedStats {
-        service: key.service_name,
-        name: key.operation_name,
-        resource: key.resource_name,
+        service: key.service_name.into_owned(),
+        name: key.operation_name.into_owned(),
+        resource: key.resource_name.into_owned(),
         http_status_code: key.http_status_code,
-        r#type: key.span_type,
+        r#type: key.span_type.into_owned(),
         db_type: String::new(), // db_type is not used yet (see proto definition)
 
         hits: group.hits,
@@ -302,7 +290,7 @@ fn encode_grouped_stats(
         error_summary: group.error_summary.encode_to_vec(),
         synthetics: key.is_synthetics_request,
         top_level_hits: group.top_level_hits,
-        span_kind: key.span_kind,
+        span_kind: key.span_kind.into_owned(),
 
         peer_tags: key
             .peer_tags
@@ -323,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_aggregation_key_from_span() {
-        let test_cases: Vec<(Span, AggregationKey<BytesString>)> = vec![
+        let test_cases: Vec<(Span, AggregationKey)> = vec![
             // Root span
             (
                 Span {
@@ -522,7 +510,7 @@ mod tests {
 
         let test_peer_tags = vec!["aws.s3.bucket", "db.instance", "db.system"];
 
-        let test_cases_with_peer_tags: Vec<(Span, AggregationKey<BytesString>)> = vec![
+        let test_cases_with_peer_tags: Vec<(Span, AggregationKey)> = vec![
             // Span with peer tags with peertags aggregation enabled
             (
                 Span {
