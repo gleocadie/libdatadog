@@ -8,6 +8,9 @@ edition.workspace = true
 version.workspace = true
 license.workspace = true
 
+[lib]
+bench = false
+
 [features]
 default = []
 use_webpki_roots = ["hyper-rustls/webpki-roots"]
