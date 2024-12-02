@@ -121,7 +121,7 @@ jobs:
           name: ${{ env.PACKAGES_DIR }}
           path: ${{ env.PACKAGES_DIR }}
 
-  test:
+  test-push:
     runs-on: ${{ matrix.os }}
     needs: pack
 
@@ -152,9 +152,14 @@ jobs:
         with:
           dotnet-version: 6.0.X
 
-      - name: Run
+      - name: Test
         run: |
           cd tests/nuget_package
           dotnet add nuget_package.csproj package ${{ env.NUGET_NAME }} --version ${{ needs.pack.outputs.NUGET_VERSION }}
           
           dotnet run
+
+      - name: NuGet Push
+        run: |
+          cd ${{ env.PACKAGES_DIR }}
+          dotnet nuget push *.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
