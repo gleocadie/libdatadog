@@ -92,10 +92,10 @@
       Pack="true" PackagePath="runtimes\win-x86\native\datadog_profiling_ffi.pdb" />
 
     <None Include="$(LibDatadogBinariesOutputDir)\x86_64-unknown-linux-gnu\release\libdatadog_profiling_ffi.so"
-      Pack="true" PackagePath="runtimes\linux-x64\native\libdatadog_profiling_ffi.so" />
+      Pack="true" PackagePath="runtimes\linux-x64\native\datadog_profiling_ffi.so" />
 
     <None Include="$(LibDatadogBinariesOutputDir)\aarch64-apple-darwin\release\libdatadog_profiling_ffi.dylib"
-      Pack="true" PackagePath="runtimes\osx-arm64\native\libdatadog_profiling_ffi.dylib" />
+      Pack="true" PackagePath="runtimes\osx-arm64\native\datadog_profiling_ffi.dylib" />
   </ItemGroup>
 
 </Project>
